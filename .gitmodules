@@ -1,0 +1,9 @@
+[submodule "submodules/lvgl"]
+	path = submodules/lvgl
+	url = https://github.com/lvgl/lvgl.git
+[submodule "submodules/portaudio"]
+	path = submodules/portaudio
+	url = https://github.com/PortAudio/portaudio.git
+[submodule "submodules/CMSIS_5"]
+	path = submodules/CMSIS_5
+	url = https://github.com/ARM-software/CMSIS_5.git
