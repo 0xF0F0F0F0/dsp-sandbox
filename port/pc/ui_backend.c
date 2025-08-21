@@ -23,13 +23,15 @@ static SDL_Texture*  texture  = NULL;
 /* Flush callback */
 static void flush_cb(lv_display_t* d, const lv_area_t* area, uint8_t* color_p)
 {
-	lv_color_t* buf = (lv_color_t*)color_p;
+	lv_color16_t* buf = (lv_color16_t*)color_p;
 
 	SDL_Rect sdl_area = {
 		.x = area->x1, .y = area->y1, .w = lv_area_get_width(area), .h = lv_area_get_height(area)
 	};
 
-	SDL_UpdateTexture(texture, &sdl_area, buf, LV_HOR_RES * sizeof(lv_color_t));
+	int pitch = lv_area_get_width(area) * sizeof(lv_color16_t);
+
+	SDL_UpdateTexture(texture, &sdl_area, buf, pitch);
 	SDL_RenderClear(renderer);
 	SDL_RenderCopy(renderer, texture, NULL, NULL);
 	SDL_RenderPresent(renderer);
