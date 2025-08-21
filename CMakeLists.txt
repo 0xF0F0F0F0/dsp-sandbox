@@ -23,6 +23,8 @@ target_include_directories(core PUBLIC
     src/audio
     src/ui
     dsp
+    submodules/CMSIS-DSP/Include
+    submodules/CMSIS-DSP/Include/dsp
 )
 
 target_include_directories(CMSISDSP PUBLIC

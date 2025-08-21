@@ -75,12 +75,20 @@ lv_display_t* ui_backend_init(void)
 		exit(1);
 	}
 
-	window = SDL_CreateWindow("LVGL SDL Backend", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, LV_HOR_RES,
-				  LV_VER_RES, 0);
+	int scale = 1;
+	if (LV_HOR_RES <= 480) {
+		scale = 3;
+	} else if (LV_HOR_RES <= 1280) {
+		scale = 2;
+	}
+
+	window = SDL_CreateWindow("LVGL SDL Backend", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+				  LV_HOR_RES * scale, LV_VER_RES * scale, 0);
 
 	renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
-	texture	 = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB565, SDL_TEXTUREACCESS_STREAMING, LV_HOR_RES,
-				     LV_VER_RES);
+	SDL_RenderSetLogicalSize(renderer, LV_HOR_RES, LV_VER_RES);
+	texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB565, SDL_TEXTUREACCESS_STREAMING, LV_HOR_RES,
+				    LV_VER_RES);
 
 	if (!window || !renderer || !texture) {
 		fprintf(stderr, "SDL initialization failed\n");
