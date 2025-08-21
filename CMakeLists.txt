@@ -23,9 +23,13 @@ target_include_directories(core PUBLIC
     src/audio
     src/ui
     dsp
-    submodules/lvgl
-    submodules/CMSIS-DSP
 )
+
+target_include_directories(CMSISDSP PUBLIC
+    submodules/CMSIS_5/CMSIS/Core/Include
+)
+
+target_link_libraries(core PUBLIC lvgl CMSISDSP)
 
 # Platform
 if(NOT DEFINED PLATFORM)
@@ -33,16 +37,33 @@ if(NOT DEFINED PLATFORM)
 endif()
 
 if(PLATFORM STREQUAL "PC")
-    add_subdirectory(platform/pc)
+    add_subdirectory(port/pc)
 elseif(PLATFORM STREQUAL "STM32")
     if(NOT DEFINED STM32_CHIP)
         message(FATAL_ERROR "STM32_CHIP not set! Use -DSTM32_CHIP=...")
     endif()
-    add_subdirectory(platform/stm32)
+    add_subdirectory(port/stm32)
 else()
     message(FATAL_ERROR "Unknown PLATFORM: ${PLATFORM}")
 endif()
 
+# Core library
+target_link_libraries(core PUBLIC port)
+
 # Executable
 add_executable(dsp_sandbox src/main.c)
-target_link_libraries(dsp_sandbox PRIVATE core platform_lib portaudio lvgl CMSISDSP)
+
+# Link core and dependencies
+target_link_libraries(dsp_sandbox PRIVATE core port portaudio)
+
+# PC-specific: find SDL2 and link to the library that uses it
+if(PLATFORM STREQUAL "PC")
+    find_package(SDL2 REQUIRED)
+
+    # Include SDL headers for both port library and executable
+    target_include_directories(port PRIVATE ${SDL2_INCLUDE_DIRS})
+    target_include_directories(dsp_sandbox PRIVATE ${SDL2_INCLUDE_DIRS})
+
+    # Link SDL2 to port library (so all SDL calls are resolved)
+    target_link_libraries(port PRIVATE ${SDL2_LIBRARIES})
+endif()
