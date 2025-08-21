@@ -4,6 +4,6 @@
 [submodule "submodules/portaudio"]
 	path = submodules/portaudio
 	url = https://github.com/PortAudio/portaudio.git
-[submodule "submodules/CMSIS_5"]
-	path = submodules/CMSIS_5
-	url = https://github.com/ARM-software/CMSIS_5.git
+[submodule "submodules/CMSIS-DSP"]
+	path = submodules/CMSIS-DSP
+	url = git@github.com:ARM-software/CMSIS-DSP.git
