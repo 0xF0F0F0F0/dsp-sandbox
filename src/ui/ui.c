@@ -84,13 +84,40 @@ static void init_styles(void)
 	lv_style_set_text_color(&style_scale_button, lv_color_white());
 }
 
+static void par_btn_event_cb(lv_event_t* e)
+{
+	lv_event_code_t code = lv_event_get_code(e);
+	if (code == LV_EVENT_CLICKED) {
+		lv_scr_load(params_screen);
+	}
+}
+
 static void seq_btn_event_cb(lv_event_t* e)
 {
 	lv_event_code_t code = lv_event_get_code(e);
 	if (code == LV_EVENT_CLICKED) {
-		lv_scr_load_anim(sequencer_screen, LV_SCR_LOAD_ANIM_MOVE_LEFT, 300, 0, false);
+		lv_scr_load(sequencer_screen);
 	}
 }
+
+static void osc_btn_event_cb(lv_event_t* e)
+{
+	lv_event_code_t code = lv_event_get_code(e);
+	if (code == LV_EVENT_CLICKED) {
+		lv_scr_load(sequencer_screen);
+	}
+}
+
+static void set_btn_event_cb(lv_event_t* e)
+{
+	lv_event_code_t code = lv_event_get_code(e);
+	if (code == LV_EVENT_CLICKED) {
+		lv_scr_load(sequencer_screen);
+	}
+}
+
+static void (*menu_callbacks[])(lv_event_t*) = { par_btn_event_cb, seq_btn_event_cb, seq_btn_event_cb,
+						 seq_btn_event_cb };
 
 // --------------------------
 // Helper functions
@@ -169,7 +196,7 @@ static lv_obj_t* create_menu_flex(lv_obj_t* tab)
 
 static void create_menu_buttons(lv_obj_t* menu)
 {
-	const char* names[] = { "SEQ", "OSC", "KEY", "SET" };
+	const char* names[] = { "PAR", "SEQ", "OSC", "SET" };
 	for (int i = 0; i < 4; i++) {
 		lv_obj_t* btn = lv_btn_create(menu);
 		lv_obj_add_style(btn, &style_button, 0);
@@ -180,9 +207,7 @@ static void create_menu_buttons(lv_obj_t* menu)
 		lv_obj_add_style(label, &style_button_label, 0);
 		lv_obj_center(label);
 
-		if (i == 0) {
-			lv_obj_add_event_cb(btn, seq_btn_event_cb, LV_EVENT_CLICKED, NULL);
-		}
+		lv_obj_add_event_cb(btn, menu_callbacks[i], LV_EVENT_CLICKED, NULL);
 	}
 }
 
@@ -238,7 +263,7 @@ static lv_obj_t* create_seq_screen(void)
 
 	lv_obj_t* steps_container = lv_obj_create(sequencer_screen);
 	lv_obj_add_style(steps_container, &style_tab_container, 0);
-	lv_obj_set_size(steps_container, 800, 120);
+	lv_obj_set_size(steps_container, lv_pct(100), lv_pct(100));
 	lv_obj_center(steps_container);
 	lv_obj_set_flex_flow(steps_container, LV_FLEX_FLOW_ROW);
 	lv_obj_set_flex_align(steps_container, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
@@ -288,6 +313,10 @@ static lv_obj_t* create_seq_screen(void)
 	lv_label_set_text(scale_label, "Select Scale");
 	lv_obj_add_style(scale_label, &style_step_label, 0);
 	lv_obj_center(scale_label);
+
+	// Menu
+	lv_obj_t* menu = create_menu_flex(sequencer_screen);
+	create_menu_buttons(menu);
 
 	return sequencer_screen;
 }
