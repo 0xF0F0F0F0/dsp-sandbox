@@ -1,52 +1,131 @@
 #include <stdio.h>
 #include "ui.h"
 
+// Screens
 static lv_obj_t* params_screen;
 static lv_obj_t* sequencer_screen;
 static lv_obj_t* tabview;
 
 extern bool play_sine;
 
+// --------------------------
+// Styles
+// --------------------------
+static lv_style_t style_screen;
+static lv_style_t style_tab_container;
+static lv_style_t style_slider;
+static lv_style_t style_slider_indicator;
+static lv_style_t style_slider_knob;
+static lv_style_t style_button;
+static lv_style_t style_button_label;
+static lv_style_t style_step_container;
+static lv_style_t style_step_button;
+static lv_style_t style_step_label;
+static lv_style_t style_scale_button;
+
+static void init_styles(void)
+{
+	// Screen background
+	lv_style_init(&style_screen);
+	lv_style_set_bg_color(&style_screen, lv_color_black());
+	lv_style_set_pad_all(&style_screen, 0);
+
+	// Tab container
+	lv_style_init(&style_tab_container);
+	lv_style_set_bg_color(&style_tab_container, lv_color_black());
+	lv_style_set_border_width(&style_tab_container, 0);
+	lv_style_set_pad_all(&style_tab_container, 0);
+
+	// Slider main background
+	lv_style_init(&style_slider);
+	lv_style_set_bg_color(&style_slider, lv_color_hex(0x777777));
+	lv_style_set_radius(&style_slider, 3);
+
+	// Slider indicator
+	lv_style_init(&style_slider_indicator);
+	lv_style_set_bg_color(&style_slider_indicator, lv_color_hex(0x005522));
+	lv_style_set_radius(&style_slider_indicator, 3);
+
+	// Slider knob
+	lv_style_init(&style_slider_knob);
+	lv_style_set_bg_color(&style_slider_knob, lv_color_hex(0x00AA22));
+	lv_style_set_radius(&style_slider_knob, LV_RADIUS_CIRCLE);
+
+	// Generic button
+	lv_style_init(&style_button);
+	lv_style_set_bg_opa(&style_button, LV_OPA_COVER);
+	lv_style_set_bg_color(&style_button, lv_color_black());
+	lv_style_set_border_width(&style_button, 0);
+	lv_style_set_radius(&style_button, 1);
+
+	// Button label
+	lv_style_init(&style_button_label);
+	lv_style_set_text_color(&style_button_label, lv_color_hex(0xAAAAAA));
+
+	// Step container
+	lv_style_init(&style_step_container);
+	lv_style_set_pad_all(&style_step_container, 5);
+
+	// Step button (gate, accent, slide)
+	lv_style_init(&style_step_button);
+	lv_style_set_bg_color(&style_step_button, lv_color_hex(0x00AA22));
+	lv_style_set_radius(&style_step_button, 3);
+
+	// Step label
+	lv_style_init(&style_step_label);
+	lv_style_set_text_color(&style_step_label, lv_color_white());
+
+	// Scale button
+	lv_style_init(&style_scale_button);
+	lv_style_set_bg_color(&style_scale_button, lv_color_black());
+	lv_style_set_border_width(&style_scale_button, 1);
+	lv_style_set_border_color(&style_scale_button, lv_color_hex(0x00AA22));
+	lv_style_set_radius(&style_scale_button, 3);
+	lv_style_set_text_color(&style_scale_button, lv_color_white());
+}
+
 static void seq_btn_event_cb(lv_event_t* e)
 {
 	lv_event_code_t code = lv_event_get_code(e);
 	if (code == LV_EVENT_CLICKED) {
-		lv_scr_load(sequencer_screen);
+		lv_scr_load_anim(sequencer_screen, LV_SCR_LOAD_ANIM_MOVE_LEFT, 300, 0, false);
 	}
 }
 
-static lv_obj_t* create_tab_flex(lv_obj_t* tab)
-{
-	lv_obj_t* cont = lv_obj_create(tab);
-	lv_obj_set_style_border_width(cont, 0, 0);
-	lv_obj_set_size(cont, lv_pct(100), lv_pct(100));
-	lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_ROW);
-	lv_obj_set_flex_align(cont, LV_FLEX_ALIGN_SPACE_AROUND, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-
-	return cont;
-}
-
+// --------------------------
+// Helper functions
+// --------------------------
 static lv_obj_t* create_slider(lv_obj_t* cont, const char* name)
 {
-	lv_obj_set_style_bg_color(cont, lv_color_black(), 0);
-	lv_obj_set_style_bg_opa(cont, LV_OPA_COVER, 0);
-
 	lv_obj_t* slider = lv_slider_create(cont);
-	lv_obj_set_style_bg_color(slider, lv_color_hex(0x777777), LV_PART_MAIN);
-	lv_obj_set_style_bg_color(slider, lv_color_hex(0x005522), LV_PART_INDICATOR);
-	lv_obj_set_style_bg_color(slider, lv_color_hex(0x00AA22), LV_PART_KNOB);
+	lv_obj_add_style(slider, &style_slider, LV_PART_MAIN);
+	lv_obj_add_style(slider, &style_slider_indicator, LV_PART_INDICATOR);
+	lv_obj_add_style(slider, &style_slider_knob, LV_PART_KNOB);
 	lv_obj_set_size(slider, 10, lv_pct(100));
 	lv_slider_set_range(slider, 0, 100);
 	lv_slider_set_value(slider, 50, LV_ANIM_ON);
 
 	lv_obj_t* label = lv_label_create(cont);
-	lv_obj_set_style_text_color(label, lv_color_hex(0x777777), 0);
 	lv_label_set_text(label, name);
+	lv_obj_add_style(label, &style_button_label, 0);
 	lv_obj_center(label);
 
 	return slider;
 }
 
+static lv_obj_t* create_tab_flex(lv_obj_t* tab)
+{
+	lv_obj_t* cont = lv_obj_create(tab);
+	lv_obj_add_style(cont, &style_tab_container, 0);
+	lv_obj_set_size(cont, lv_pct(100), lv_pct(100));
+	lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_ROW);
+	lv_obj_set_flex_align(cont, LV_FLEX_ALIGN_SPACE_AROUND, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+	return cont;
+}
+
+// --------------------------
+// Tab creation
+// --------------------------
 static void create_tab_1(lv_obj_t* tab)
 {
 	lv_obj_t* cont = create_tab_flex(tab);
@@ -74,11 +153,13 @@ static void create_tab_3(lv_obj_t* tab)
 	create_slider(cont, "VOL");
 }
 
+// --------------------------
+// Menu buttons
+// --------------------------
 static lv_obj_t* create_menu_flex(lv_obj_t* tab)
 {
 	lv_obj_t* cont = lv_obj_create(tab);
-	lv_obj_set_style_border_width(cont, 0, 0);
-	lv_obj_set_style_bg_color(cont, lv_color_black(), 0);
+	lv_obj_add_style(cont, &style_tab_container, 0);
 	lv_obj_set_size(cont, lv_pct(100), lv_pct(10));
 	lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_ROW);
 	lv_obj_set_flex_align(cont, LV_FLEX_ALIGN_SPACE_AROUND, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
@@ -88,175 +169,138 @@ static lv_obj_t* create_menu_flex(lv_obj_t* tab)
 
 static void create_menu_buttons(lv_obj_t* menu)
 {
-	int btn_height = 20;
-	int btn_width  = 60;
+	const char* names[] = { "SEQ", "OSC", "KEY", "SET" };
+	for (int i = 0; i < 4; i++) {
+		lv_obj_t* btn = lv_btn_create(menu);
+		lv_obj_add_style(btn, &style_button, 0);
+		lv_obj_set_size(btn, 60, 20);
 
-	lv_obj_t* seq_btn = lv_btn_create(menu);
-	lv_obj_set_size(seq_btn, btn_width, btn_height);
-	lv_obj_t* seq_label = lv_label_create(seq_btn);
-	lv_label_set_text(seq_label, "SEQ");
-	lv_obj_center(seq_label);
-	lv_obj_add_event_cb(seq_btn, seq_btn_event_cb, LV_EVENT_CLICKED, NULL);
+		lv_obj_t* label = lv_label_create(btn);
+		lv_label_set_text(label, names[i]);
+		lv_obj_add_style(label, &style_button_label, 0);
+		lv_obj_center(label);
 
-	lv_obj_t* osc_btn = lv_btn_create(menu);
-	lv_obj_set_size(osc_btn, btn_width, btn_height);
-	lv_obj_t* osc_label = lv_label_create(osc_btn);
-	lv_label_set_text(osc_label, "OSC");
-	lv_obj_center(osc_label);
-
-	lv_obj_t* key_btn = lv_btn_create(menu);
-	lv_obj_set_size(key_btn, btn_width, btn_height);
-	lv_obj_t* key_label = lv_label_create(key_btn);
-	lv_label_set_text(key_label, "KEY");
-	lv_obj_center(key_label);
-
-	lv_obj_t* set_btn = lv_btn_create(menu);
-	lv_obj_set_size(set_btn, btn_width, btn_height);
-	lv_obj_t* set_label = lv_label_create(set_btn);
-	lv_label_set_text(set_label, "SET");
-	lv_obj_center(set_label);
-
-	uint32_t cnt = lv_obj_get_child_cnt(menu);
-	for (uint32_t i = 0; i < cnt; i++) {
-		lv_obj_t* btn = lv_obj_get_child(menu, i);
-		lv_obj_set_style_bg_color(btn, lv_color_black(), 0);
-		lv_obj_set_style_text_color(btn, lv_color_hex(0xAAAAAA), 0);
+		if (i == 0) {
+			lv_obj_add_event_cb(btn, seq_btn_event_cb, LV_EVENT_CLICKED, NULL);
+		}
 	}
 }
 
+// --------------------------
+// Params screen
+// --------------------------
 static lv_obj_t* create_params_screen(void)
 {
 	params_screen = lv_obj_create(NULL);
+	lv_obj_add_style(params_screen, &style_screen, 0);
 
-	// tab view
+	// Tabview
 	tabview = lv_tabview_create(params_screen);
 	lv_tabview_set_tab_bar_size(tabview, 5);
 	lv_tabview_set_tab_bar_position(tabview, LV_DIR_TOP);
-	lv_obj_set_style_bg_color(tabview, lv_color_black(), 0);
+	lv_obj_add_style(tabview, &style_screen, 0);
 
-	// tab bar
-	lv_obj_t* bar = lv_tabview_get_tab_bar(tabview);
-	lv_obj_set_style_bg_color(bar, lv_color_black(), LV_PART_MAIN);
-
-	// individual tabs
+	// Individual tabs
 	lv_obj_t* tab1 = lv_tabview_add_tab(tabview, "");
 	create_tab_1(tab1);
-
 	lv_obj_t* tab2 = lv_tabview_add_tab(tabview, "");
 	create_tab_2(tab2);
-
 	lv_obj_t* tab3 = lv_tabview_add_tab(tabview, "");
 	create_tab_3(tab3);
 
-	// color the tab buttons
-	uint32_t cnt = lv_obj_get_child_cnt(bar);
+	// Tab button styles
+	lv_obj_t* bar = lv_tabview_get_tab_bar(tabview);
+	uint32_t  cnt = lv_obj_get_child_cnt(bar);
 	for (uint32_t i = 0; i < cnt; i++) {
 		lv_obj_t* btn = lv_obj_get_child(bar, i);
-
-		// Set inactive style
-		lv_obj_set_style_bg_color(btn, lv_color_black(), 0);
-		lv_obj_set_style_text_color(btn, lv_color_hex(0xAAAAAA), 0);
-
-		// Set checked style (active tab)
+		lv_obj_add_style(btn, &style_button, 0);
+		// checked state
 		lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_CHECKED);
 		lv_obj_set_style_bg_color(btn, lv_color_hex(0x005522), LV_PART_MAIN | LV_STATE_CHECKED);
 		lv_obj_set_style_border_width(btn, 0, LV_PART_MAIN | LV_STATE_CHECKED);
 		lv_obj_set_style_text_color(btn, lv_color_hex(0xCCCCCC), LV_STATE_CHECKED);
 	}
 
+	// Menu
 	lv_obj_t* menu = create_menu_flex(tabview);
 	create_menu_buttons(menu);
 
 	return params_screen;
 }
 
-static void gate_event_cb(lv_event_t* e);
-static void accent_event_cb(lv_event_t* e);
-static void slide_event_cb(lv_event_t* e);
-static void scale_select_cb(lv_event_t* e);
-
+// --------------------------
+// Sequencer screen
+// --------------------------
 static lv_obj_t* create_seq_screen(void)
 {
 	sequencer_screen = lv_obj_create(NULL);
+	lv_obj_add_style(sequencer_screen, &style_screen, 0);
 
-	// Create a flex container for all steps
 	lv_obj_t* steps_container = lv_obj_create(sequencer_screen);
-	lv_obj_remove_style_all(steps_container);    // clean default style
-	lv_obj_set_size(steps_container, 800, 120);  // adjust as needed
+	lv_obj_add_style(steps_container, &style_tab_container, 0);
+	lv_obj_set_size(steps_container, 800, 120);
 	lv_obj_center(steps_container);
-
-	lv_obj_set_flex_flow(steps_container, LV_FLEX_FLOW_ROW);  // horizontal layout
+	lv_obj_set_flex_flow(steps_container, LV_FLEX_FLOW_ROW);
 	lv_obj_set_flex_align(steps_container, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-	lv_obj_set_style_pad_row(steps_container, 0, 0);
-	lv_obj_set_style_pad_column(steps_container, 5, 0);  // spacing between steps
+	lv_obj_set_style_pad_column(steps_container, 5, 0);
 
-	// Create 16 steps
-	for (int i = 0; i < 16; i++) {
+	for (int i = 0; i < 8; i++) {
 		lv_obj_t* step = lv_obj_create(steps_container);
+		lv_obj_add_style(step, &style_step_container, 0);
 		lv_obj_set_size(step, 45, 110);
-		lv_obj_remove_style_all(step);	// clean style
-
-		// Set flex column layout for widgets in this step
 		lv_obj_set_flex_flow(step, LV_FLEX_FLOW_COLUMN);
 		lv_obj_set_flex_align(step, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER);
-		lv_obj_set_style_pad_row(step, 5, 0);
 
-		// Gate button
 		lv_obj_t* gate_btn = lv_btn_create(step);
+		lv_obj_add_style(gate_btn, &style_step_button, 0);
 		lv_obj_set_size(gate_btn, 40, 20);
 		lv_obj_t* gate_label = lv_label_create(gate_btn);
 		lv_label_set_text(gate_label, "Gate");
+		lv_obj_add_style(gate_label, &style_step_label, 0);
 		lv_obj_center(gate_label);
-		/* lv_obj_add_event_cb(gate_btn, gate_event_cb, LV_EVENT_CLICKED, (void*)(intptr_t)i); */
 
-		// Note roller
 		lv_obj_t* note_roller = lv_roller_create(step);
 		lv_roller_set_options(note_roller, "C\nC#\nD\nD#\nE\nF\nF#\nG\nG#\nA\nA#\nB", LV_ROLLER_MODE_INFINITE);
 		lv_obj_set_size(note_roller, 40, 50);
 
-		// Accent button
 		lv_obj_t* accent_btn = lv_btn_create(step);
+		lv_obj_add_style(accent_btn, &style_step_button, 0);
 		lv_obj_set_size(accent_btn, 20, 20);
 		lv_obj_t* accent_label = lv_label_create(accent_btn);
 		lv_label_set_text(accent_label, "A");
+		lv_obj_add_style(accent_label, &style_step_label, 0);
 		lv_obj_center(accent_label);
-		/* lv_obj_add_event_cb(accent_btn, accent_event_cb, LV_EVENT_CLICKED, (void*)(intptr_t)i); */
 
-		// Slide button
 		lv_obj_t* slide_btn = lv_btn_create(step);
+		lv_obj_add_style(slide_btn, &style_step_button, 0);
 		lv_obj_set_size(slide_btn, 20, 20);
 		lv_obj_t* slide_label = lv_label_create(slide_btn);
 		lv_label_set_text(slide_label, "S");
+		lv_obj_add_style(slide_label, &style_step_label, 0);
 		lv_obj_center(slide_label);
-		/* lv_obj_add_event_cb(slide_btn, slide_event_cb, LV_EVENT_CLICKED, (void*)(intptr_t)i); */
 	}
 
-	// Scale selection button
 	lv_obj_t* scale_btn = lv_btn_create(sequencer_screen);
+	lv_obj_add_style(scale_btn, &style_scale_button, 0);
 	lv_obj_set_size(scale_btn, 120, 40);
 	lv_obj_align(scale_btn, LV_ALIGN_TOP_RIGHT, -10, 10);
 	lv_obj_t* scale_label = lv_label_create(scale_btn);
 	lv_label_set_text(scale_label, "Select Scale");
+	lv_obj_add_style(scale_label, &style_step_label, 0);
 	lv_obj_center(scale_label);
-	/* lv_obj_add_event_cb(scale_btn, scale_select_cb, LV_EVENT_CLICKED, NULL); */
 
 	return sequencer_screen;
 }
 
-void switch_to_seq_screen(void)
-{
-	lv_scr_load_anim(sequencer_screen, LV_SCR_LOAD_ANIM_MOVE_LEFT, 300, 0, false);
-}
-
-void switch_to_params_screen(void)
-{
-	lv_scr_load_anim(params_screen, LV_SCR_LOAD_ANIM_MOVE_RIGHT, 300, 0, false);
-}
-
+// --------------------------
+// UI init
+// --------------------------
 void ui_init(lv_display_t* disp)
 {
+	init_styles();
+
 	params_screen	 = create_params_screen();
 	sequencer_screen = create_seq_screen();
 
-	lv_scr_load(sequencer_screen);
+	lv_scr_load(params_screen);
 }
