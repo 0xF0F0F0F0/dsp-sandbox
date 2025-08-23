@@ -2,16 +2,16 @@
 #include "ui.h"
 
 static lv_obj_t* params_screen;
-static lv_obj_t* seq_screen;
+static lv_obj_t* sequencer_screen;
 static lv_obj_t* tabview;
 
 extern bool play_sine;
 
-static void btn_event_cb(lv_event_t* e)
+static void seq_btn_event_cb(lv_event_t* e)
 {
-	if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
-		play_sine = !play_sine;	 // toggle playback
-		printf("Button clicked, play_sine = %d\n", play_sine);
+	lv_event_code_t code = lv_event_get_code(e);
+	if (code == LV_EVENT_CLICKED) {
+		lv_scr_load(sequencer_screen);
 	}
 }
 
@@ -96,6 +96,7 @@ static void create_menu_buttons(lv_obj_t* menu)
 	lv_obj_t* seq_label = lv_label_create(seq_btn);
 	lv_label_set_text(seq_label, "SEQ");
 	lv_obj_center(seq_label);
+	lv_obj_add_event_cb(seq_btn, seq_btn_event_cb, LV_EVENT_CLICKED, NULL);
 
 	lv_obj_t* osc_btn = lv_btn_create(menu);
 	lv_obj_set_size(osc_btn, btn_width, btn_height);
@@ -169,19 +170,82 @@ static lv_obj_t* create_params_screen(void)
 	return params_screen;
 }
 
+static void gate_event_cb(lv_event_t* e);
+static void accent_event_cb(lv_event_t* e);
+static void slide_event_cb(lv_event_t* e);
+static void scale_select_cb(lv_event_t* e);
+
 static lv_obj_t* create_seq_screen(void)
 {
-	seq_screen	= lv_obj_create(NULL);
-	lv_obj_t* label = lv_label_create(seq_screen);
-	lv_label_set_text(label, "Blank screen");
-	lv_obj_center(label);
+	sequencer_screen = lv_obj_create(NULL);
 
-	return seq_screen;
+	// Create a flex container for all steps
+	lv_obj_t* steps_container = lv_obj_create(sequencer_screen);
+	lv_obj_remove_style_all(steps_container);    // clean default style
+	lv_obj_set_size(steps_container, 800, 120);  // adjust as needed
+	lv_obj_center(steps_container);
+
+	lv_obj_set_flex_flow(steps_container, LV_FLEX_FLOW_ROW);  // horizontal layout
+	lv_obj_set_flex_align(steps_container, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+	lv_obj_set_style_pad_row(steps_container, 0, 0);
+	lv_obj_set_style_pad_column(steps_container, 5, 0);  // spacing between steps
+
+	// Create 16 steps
+	for (int i = 0; i < 16; i++) {
+		lv_obj_t* step = lv_obj_create(steps_container);
+		lv_obj_set_size(step, 45, 110);
+		lv_obj_remove_style_all(step);	// clean style
+
+		// Set flex column layout for widgets in this step
+		lv_obj_set_flex_flow(step, LV_FLEX_FLOW_COLUMN);
+		lv_obj_set_flex_align(step, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER);
+		lv_obj_set_style_pad_row(step, 5, 0);
+
+		// Gate button
+		lv_obj_t* gate_btn = lv_btn_create(step);
+		lv_obj_set_size(gate_btn, 40, 20);
+		lv_obj_t* gate_label = lv_label_create(gate_btn);
+		lv_label_set_text(gate_label, "Gate");
+		lv_obj_center(gate_label);
+		/* lv_obj_add_event_cb(gate_btn, gate_event_cb, LV_EVENT_CLICKED, (void*)(intptr_t)i); */
+
+		// Note roller
+		lv_obj_t* note_roller = lv_roller_create(step);
+		lv_roller_set_options(note_roller, "C\nC#\nD\nD#\nE\nF\nF#\nG\nG#\nA\nA#\nB", LV_ROLLER_MODE_INFINITE);
+		lv_obj_set_size(note_roller, 40, 50);
+
+		// Accent button
+		lv_obj_t* accent_btn = lv_btn_create(step);
+		lv_obj_set_size(accent_btn, 20, 20);
+		lv_obj_t* accent_label = lv_label_create(accent_btn);
+		lv_label_set_text(accent_label, "A");
+		lv_obj_center(accent_label);
+		/* lv_obj_add_event_cb(accent_btn, accent_event_cb, LV_EVENT_CLICKED, (void*)(intptr_t)i); */
+
+		// Slide button
+		lv_obj_t* slide_btn = lv_btn_create(step);
+		lv_obj_set_size(slide_btn, 20, 20);
+		lv_obj_t* slide_label = lv_label_create(slide_btn);
+		lv_label_set_text(slide_label, "S");
+		lv_obj_center(slide_label);
+		/* lv_obj_add_event_cb(slide_btn, slide_event_cb, LV_EVENT_CLICKED, (void*)(intptr_t)i); */
+	}
+
+	// Scale selection button
+	lv_obj_t* scale_btn = lv_btn_create(sequencer_screen);
+	lv_obj_set_size(scale_btn, 120, 40);
+	lv_obj_align(scale_btn, LV_ALIGN_TOP_RIGHT, -10, 10);
+	lv_obj_t* scale_label = lv_label_create(scale_btn);
+	lv_label_set_text(scale_label, "Select Scale");
+	lv_obj_center(scale_label);
+	/* lv_obj_add_event_cb(scale_btn, scale_select_cb, LV_EVENT_CLICKED, NULL); */
+
+	return sequencer_screen;
 }
 
 void switch_to_seq_screen(void)
 {
-	lv_scr_load_anim(seq_screen, LV_SCR_LOAD_ANIM_MOVE_LEFT, 300, 0, false);
+	lv_scr_load_anim(sequencer_screen, LV_SCR_LOAD_ANIM_MOVE_LEFT, 300, 0, false);
 }
 
 void switch_to_params_screen(void)
@@ -191,8 +255,8 @@ void switch_to_params_screen(void)
 
 void ui_init(lv_display_t* disp)
 {
-	params_screen = create_params_screen();
-	seq_screen    = create_seq_screen();
+	params_screen	 = create_params_screen();
+	sequencer_screen = create_seq_screen();
 
-	lv_scr_load(params_screen);
+	lv_scr_load(sequencer_screen);
 }
