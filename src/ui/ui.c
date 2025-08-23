@@ -74,13 +74,62 @@ static void create_tab_3(lv_obj_t* tab)
 	create_slider(cont, "VOL");
 }
 
+static lv_obj_t* create_menu_flex(lv_obj_t* tab)
+{
+	lv_obj_t* cont = lv_obj_create(tab);
+	lv_obj_set_style_border_width(cont, 0, 0);
+	lv_obj_set_style_bg_color(cont, lv_color_black(), 0);
+	lv_obj_set_size(cont, lv_pct(100), lv_pct(10));
+	lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_ROW);
+	lv_obj_set_flex_align(cont, LV_FLEX_ALIGN_SPACE_AROUND, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+	lv_obj_clear_flag(cont, LV_OBJ_FLAG_SCROLLABLE);
+	return cont;
+}
+
+static void create_menu_buttons(lv_obj_t* menu)
+{
+	int btn_height = 20;
+	int btn_width  = 60;
+
+	lv_obj_t* seq_btn = lv_btn_create(menu);
+	lv_obj_set_size(seq_btn, btn_width, btn_height);
+	lv_obj_t* seq_label = lv_label_create(seq_btn);
+	lv_label_set_text(seq_label, "SEQ");
+	lv_obj_center(seq_label);
+
+	lv_obj_t* osc_btn = lv_btn_create(menu);
+	lv_obj_set_size(osc_btn, btn_width, btn_height);
+	lv_obj_t* osc_label = lv_label_create(osc_btn);
+	lv_label_set_text(osc_label, "OSC");
+	lv_obj_center(osc_label);
+
+	lv_obj_t* key_btn = lv_btn_create(menu);
+	lv_obj_set_size(key_btn, btn_width, btn_height);
+	lv_obj_t* key_label = lv_label_create(key_btn);
+	lv_label_set_text(key_label, "KEY");
+	lv_obj_center(key_label);
+
+	lv_obj_t* set_btn = lv_btn_create(menu);
+	lv_obj_set_size(set_btn, btn_width, btn_height);
+	lv_obj_t* set_label = lv_label_create(set_btn);
+	lv_label_set_text(set_label, "SET");
+	lv_obj_center(set_label);
+
+	uint32_t cnt = lv_obj_get_child_cnt(menu);
+	for (uint32_t i = 0; i < cnt; i++) {
+		lv_obj_t* btn = lv_obj_get_child(menu, i);
+		lv_obj_set_style_bg_color(btn, lv_color_black(), 0);
+		lv_obj_set_style_text_color(btn, lv_color_hex(0xAAAAAA), 0);
+	}
+}
+
 static lv_obj_t* create_params_screen(void)
 {
 	params_screen = lv_obj_create(NULL);
 
 	// tab view
 	tabview = lv_tabview_create(params_screen);
-	lv_tabview_set_tab_bar_size(tabview, 25);
+	lv_tabview_set_tab_bar_size(tabview, 5);
 	lv_tabview_set_tab_bar_position(tabview, LV_DIR_TOP);
 	lv_obj_set_style_bg_color(tabview, lv_color_black(), 0);
 
@@ -89,13 +138,13 @@ static lv_obj_t* create_params_screen(void)
 	lv_obj_set_style_bg_color(bar, lv_color_black(), LV_PART_MAIN);
 
 	// individual tabs
-	lv_obj_t* tab1 = lv_tabview_add_tab(tabview, "1");
+	lv_obj_t* tab1 = lv_tabview_add_tab(tabview, "");
 	create_tab_1(tab1);
 
-	lv_obj_t* tab2 = lv_tabview_add_tab(tabview, "2");
+	lv_obj_t* tab2 = lv_tabview_add_tab(tabview, "");
 	create_tab_2(tab2);
 
-	lv_obj_t* tab3 = lv_tabview_add_tab(tabview, "3");
+	lv_obj_t* tab3 = lv_tabview_add_tab(tabview, "");
 	create_tab_3(tab3);
 
 	// color the tab buttons
@@ -113,6 +162,9 @@ static lv_obj_t* create_params_screen(void)
 		lv_obj_set_style_border_width(btn, 0, LV_PART_MAIN | LV_STATE_CHECKED);
 		lv_obj_set_style_text_color(btn, lv_color_hex(0xCCCCCC), LV_STATE_CHECKED);
 	}
+
+	lv_obj_t* menu = create_menu_flex(tabview);
+	create_menu_buttons(menu);
 
 	return params_screen;
 }
