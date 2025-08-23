@@ -77,8 +77,6 @@ lv_display_t* ui_backend_init(void)
 
 	int scale = 1;
 	if (LV_HOR_RES <= 480) {
-		scale = 3;
-	} else if (LV_HOR_RES <= 1280) {
 		scale = 2;
 	}
 

@@ -9,6 +9,10 @@
 #define LV_MEM_SIZE (128U * 1024U)
 #define LV_USE_LOG 1
 #define LV_LOG_PRINTF 1
-#define LV_FONT_MONTSERRAT_28 1
+#define LV_FONT_MONTSERRAT_12 1
+#define LV_USE_THEME_MONO 1
+#define LV_USE_THEME_MATERIAL 1
+#define LV_USE_THEME_ALIEN 1
+#define LV_USE_THEME_NIGHT 1
 
 #endif /*LV_CONF_H*/
