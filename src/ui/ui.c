@@ -180,6 +180,28 @@ static void create_tab_3(lv_obj_t* tab)
 	create_slider(cont, "VOL");
 }
 
+// Sequencer step state (16 steps, each can be on/off)
+static bool sequencer_steps[16] = {false};
+
+static void step_button_event_cb(lv_event_t* e)
+{
+	lv_event_code_t code = lv_event_get_code(e);
+	if (code == LV_EVENT_CLICKED) {
+		lv_obj_t* btn = (lv_obj_t*)lv_event_get_target(e);
+		int step_index = (int)(intptr_t)lv_event_get_user_data(e);
+		
+		// Toggle step state
+		sequencer_steps[step_index] = !sequencer_steps[step_index];
+		
+		// Update button appearance
+		if (sequencer_steps[step_index]) {
+			lv_obj_set_style_bg_color(btn, lv_color_hex(0x00AA22), LV_PART_MAIN);
+		} else {
+			lv_obj_set_style_bg_color(btn, lv_color_hex(0x333333), LV_PART_MAIN);
+		}
+	}
+}
+
 // --------------------------
 // Menu buttons
 // --------------------------
@@ -261,61 +283,48 @@ static lv_obj_t* create_seq_screen(void)
 	sequencer_screen = lv_obj_create(NULL);
 	lv_obj_add_style(sequencer_screen, &style_screen, 0);
 
-	lv_obj_t* steps_container = lv_obj_create(sequencer_screen);
-	lv_obj_add_style(steps_container, &style_tab_container, 0);
-	lv_obj_set_size(steps_container, lv_pct(100), lv_pct(100));
-	lv_obj_center(steps_container);
-	lv_obj_set_flex_flow(steps_container, LV_FLEX_FLOW_ROW);
-	lv_obj_set_flex_align(steps_container, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-	lv_obj_set_style_pad_column(steps_container, 5, 0);
+	// Grid container centered on screen
+	lv_obj_t* grid_container = lv_obj_create(sequencer_screen);
+	lv_obj_add_style(grid_container, &style_tab_container, 0);
+	lv_obj_set_size(grid_container, 240, 240);
+	lv_obj_center(grid_container);
+	lv_obj_set_layout(grid_container, LV_LAYOUT_GRID);
+	lv_obj_set_style_pad_all(grid_container, 8, 0);
+	lv_obj_set_style_pad_gap(grid_container, 4, 0);
+	
+	// Define grid: 4 columns, 4 rows
+	static int32_t col_dsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
+	static int32_t row_dsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
+	lv_obj_set_grid_dsc_array(grid_container, col_dsc, row_dsc);
 
-	for (int i = 0; i < 8; i++) {
-		lv_obj_t* step = lv_obj_create(steps_container);
-		lv_obj_add_style(step, &style_step_container, 0);
-		lv_obj_set_size(step, 45, 110);
-		lv_obj_set_flex_flow(step, LV_FLEX_FLOW_COLUMN);
-		lv_obj_set_flex_align(step, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER);
-
-		lv_obj_t* gate_btn = lv_btn_create(step);
-		lv_obj_add_style(gate_btn, &style_step_button, 0);
-		lv_obj_set_size(gate_btn, 40, 20);
-		lv_obj_t* gate_label = lv_label_create(gate_btn);
-		lv_label_set_text(gate_label, "Gate");
-		lv_obj_add_style(gate_label, &style_step_label, 0);
-		lv_obj_center(gate_label);
-
-		lv_obj_t* note_roller = lv_roller_create(step);
-		lv_roller_set_options(note_roller, "C\nC#\nD\nD#\nE\nF\nF#\nG\nG#\nA\nA#\nB", LV_ROLLER_MODE_INFINITE);
-		lv_obj_set_size(note_roller, 40, 50);
-
-		lv_obj_t* accent_btn = lv_btn_create(step);
-		lv_obj_add_style(accent_btn, &style_step_button, 0);
-		lv_obj_set_size(accent_btn, 20, 20);
-		lv_obj_t* accent_label = lv_label_create(accent_btn);
-		lv_label_set_text(accent_label, "A");
-		lv_obj_add_style(accent_label, &style_step_label, 0);
-		lv_obj_center(accent_label);
-
-		lv_obj_t* slide_btn = lv_btn_create(step);
-		lv_obj_add_style(slide_btn, &style_step_button, 0);
-		lv_obj_set_size(slide_btn, 20, 20);
-		lv_obj_t* slide_label = lv_label_create(slide_btn);
-		lv_label_set_text(slide_label, "S");
-		lv_obj_add_style(slide_label, &style_step_label, 0);
-		lv_obj_center(slide_label);
+	// Create 4x4 grid of buttons (16 total)
+	for (int row = 0; row < 4; row++) {
+		for (int col = 0; col < 4; col++) {
+			int step_index = row * 4 + col;
+			
+			lv_obj_t* btn = lv_btn_create(grid_container);
+			lv_obj_set_size(btn, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+			lv_obj_set_grid_cell(btn, LV_GRID_ALIGN_STRETCH, col, 1, LV_GRID_ALIGN_STRETCH, row, 1);
+			
+			// Style the button to be square
+			lv_obj_set_style_bg_color(btn, lv_color_hex(0x333333), LV_PART_MAIN);
+			lv_obj_set_style_border_color(btn, lv_color_hex(0x666666), LV_PART_MAIN);
+			lv_obj_set_style_border_width(btn, 1, LV_PART_MAIN);
+			lv_obj_set_style_radius(btn, 2, LV_PART_MAIN);
+			
+			// Add event callback with step index as user data
+			lv_obj_add_event_cb(btn, step_button_event_cb, LV_EVENT_CLICKED, (void*)(intptr_t)step_index);
+		}
 	}
 
-	lv_obj_t* scale_btn = lv_btn_create(sequencer_screen);
-	lv_obj_add_style(scale_btn, &style_scale_button, 0);
-	lv_obj_set_size(scale_btn, 120, 40);
-	lv_obj_align(scale_btn, LV_ALIGN_TOP_RIGHT, -10, 10);
-	lv_obj_t* scale_label = lv_label_create(scale_btn);
-	lv_label_set_text(scale_label, "Select Scale");
-	lv_obj_add_style(scale_label, &style_step_label, 0);
-	lv_obj_center(scale_label);
-
-	// Menu
-	lv_obj_t* menu = create_menu_flex(sequencer_screen);
+	// Menu positioned at bottom
+	lv_obj_t* menu = lv_obj_create(sequencer_screen);
+	lv_obj_add_style(menu, &style_tab_container, 0);
+	lv_obj_set_size(menu, lv_pct(100), lv_pct(10));
+	lv_obj_align(menu, LV_ALIGN_BOTTOM_MID, 0, 0);
+	lv_obj_set_flex_flow(menu, LV_FLEX_FLOW_ROW);
+	lv_obj_set_flex_align(menu, LV_FLEX_ALIGN_SPACE_AROUND, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+	lv_obj_clear_flag(menu, LV_OBJ_FLAG_SCROLLABLE);
 	create_menu_buttons(menu);
 
 	return sequencer_screen;
