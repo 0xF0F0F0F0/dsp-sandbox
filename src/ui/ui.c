@@ -40,18 +40,20 @@ static void init_styles(void)
 
 	// Slider main background
 	lv_style_init(&style_slider);
-	lv_style_set_bg_color(&style_slider, lv_color_hex(0x777777));
+	lv_style_set_bg_color(&style_slider, lv_color_hex(0x333333));
 	lv_style_set_radius(&style_slider, 3);
 
-	// Slider indicator
+	// Slider indicator (filled portion)
 	lv_style_init(&style_slider_indicator);
-	lv_style_set_bg_color(&style_slider_indicator, lv_color_hex(0x005522));
+	lv_style_set_bg_color(&style_slider_indicator, lv_color_hex(0x00AA22));
 	lv_style_set_radius(&style_slider_indicator, 3);
 
-	// Slider knob
+	// Slider knob (make it invisible/flat)
 	lv_style_init(&style_slider_knob);
-	lv_style_set_bg_color(&style_slider_knob, lv_color_hex(0x00AA22));
-	lv_style_set_radius(&style_slider_knob, LV_RADIUS_CIRCLE);
+	lv_style_set_bg_opa(&style_slider_knob, LV_OPA_TRANSP);
+	lv_style_set_border_width(&style_slider_knob, 0);
+	lv_style_set_width(&style_slider_knob, 0);
+	lv_style_set_height(&style_slider_knob, 0);
 
 	// Generic button
 	lv_style_init(&style_button);
@@ -126,18 +128,26 @@ static void (*menu_callbacks[])(lv_event_t*) = { par_btn_event_cb, seq_btn_event
 // --------------------------
 static lv_obj_t* create_slider(lv_obj_t* cont, const char* name)
 {
-	lv_obj_t* slider = lv_slider_create(cont);
+	// Create container for slider and label
+	lv_obj_t* slider_cont = lv_obj_create(cont);
+	lv_obj_add_style(slider_cont, &style_tab_container, 0);
+	lv_obj_set_size(slider_cont, 80, lv_pct(100));
+	lv_obj_set_flex_flow(slider_cont, LV_FLEX_FLOW_COLUMN);
+	lv_obj_set_flex_align(slider_cont, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+	// Create label at the bottom, outside the slider
+	lv_obj_t* label = lv_label_create(slider_cont);
+	lv_label_set_text(label, name);
+	lv_obj_add_style(label, &style_button_label, 0);
+
+	// Create vertical slider
+	lv_obj_t* slider = lv_slider_create(slider_cont);
 	lv_obj_add_style(slider, &style_slider, LV_PART_MAIN);
 	lv_obj_add_style(slider, &style_slider_indicator, LV_PART_INDICATOR);
 	lv_obj_add_style(slider, &style_slider_knob, LV_PART_KNOB);
-	lv_obj_set_size(slider, 10, lv_pct(100));
+	lv_obj_set_size(slider, 30, lv_pct(80));
 	lv_slider_set_range(slider, 0, 100);
 	lv_slider_set_value(slider, 50, LV_ANIM_ON);
-
-	lv_obj_t* label = lv_label_create(cont);
-	lv_label_set_text(label, name);
-	lv_obj_add_style(label, &style_button_label, 0);
-	lv_obj_center(label);
 
 	return slider;
 }
@@ -149,6 +159,7 @@ static lv_obj_t* create_tab_flex(lv_obj_t* tab)
 	lv_obj_set_size(cont, lv_pct(100), lv_pct(100));
 	lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_ROW);
 	lv_obj_set_flex_align(cont, LV_FLEX_ALIGN_SPACE_AROUND, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+	lv_obj_set_style_pad_all(cont, 10, 0);
 	return cont;
 }
 
