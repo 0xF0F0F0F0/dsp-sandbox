@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include "ui.h"
@@ -132,13 +133,10 @@ static void slider_event_cb(lv_event_t* e)
 		// Get slider value (0-100) and store in global state
 		int32_t value = lv_slider_get_value(slider);
 		synth_state_set_parameter(param, (uint8_t)value);
-		
+
 		// Debug output
-		const char* param_names[] = {
-			"CUTOFF", "RESONANCE", "ENVELOPE", "ACCENT",
-			"ATTACK", "DECAY", "SUSTAIN", "RELEASE", 
-			"DISTORTION", "DELAY", "REVERB", "VOLUME"
-		};
+		const char* param_names[] = { "CUTOFF",	 "RESONANCE", "ENVELOPE",   "ACCENT", "ATTACK", "DECAY",
+					      "SUSTAIN", "RELEASE",   "DISTORTION", "DELAY",  "REVERB", "VOLUME" };
 		printf("Parameter changed: %s = %d\n", param_names[param], (int)value);
 	}
 }
@@ -229,8 +227,137 @@ static const synth_param_t tab3_params[] = { PARAM_DISTORTION, PARAM_DELAY, PARA
 // Popup objects
 static lv_obj_t* scale_popup	    = NULL;
 static lv_obj_t* step_popup	    = NULL;
+static lv_obj_t* bpm_popup	    = NULL;
 static int	 current_step_index = -1;
 static lv_obj_t* scale_btn_label    = NULL;
+static lv_obj_t* bpm_btn_label	    = NULL;
+
+static void bpm_keypad_event_cb(lv_event_t* e)
+{
+	lv_event_code_t code = lv_event_get_code(e);
+	if (code == LV_EVENT_READY) {
+		lv_obj_t*   ta	 = lv_event_get_target(e);
+		const char* text = lv_textarea_get_text(ta);
+
+		if (strlen(text) > 3) {
+			return;
+		}
+
+		int bpm_value = atoi(text);
+		if (bpm_value > 300) {
+			bpm_value = 300;
+		}
+
+		g_synth_state.bpm = (float)bpm_value;
+
+		// Update button label
+		if (bpm_btn_label) {
+			char bpm_text[16];
+			snprintf(bpm_text, sizeof(bpm_text), "%d", bpm_value);
+			lv_label_set_text(bpm_btn_label, bpm_text);
+		}
+
+		printf("BPM changed: %d\n", bpm_value);
+
+		// Close popup
+		if (bpm_popup) {
+			lv_obj_del(bpm_popup);
+			bpm_popup = NULL;
+		}
+	}
+}
+
+static void bpm_btn_event_cb(lv_event_t* e)
+{
+	lv_event_code_t code = lv_event_get_code(e);
+	if (code == LV_EVENT_CLICKED) {
+		if (bpm_popup) {
+			lv_obj_del(bpm_popup);
+			bpm_popup = NULL;
+		} else {
+			// Create BPM keypad popup
+			bpm_popup = lv_obj_create(lv_scr_act());
+			lv_obj_add_style(bpm_popup, &style_tab_container, 0);
+			lv_obj_set_size(bpm_popup, 280, 280);
+			lv_obj_center(bpm_popup);
+			lv_obj_set_style_bg_opa(bpm_popup, LV_OPA_80, LV_PART_MAIN);
+
+			// Title
+			lv_obj_t* title = lv_label_create(bpm_popup);
+			lv_label_set_text(title, "Enter BPM");
+			lv_obj_add_style(title, &style_button_label, 0);
+			lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 10);
+
+			// Text area for input
+			lv_obj_t* ta = lv_textarea_create(bpm_popup);
+			lv_textarea_set_max_length(ta, 3);
+			lv_obj_set_size(ta, 160, 40);
+			lv_obj_align(ta, LV_ALIGN_TOP_MID, 0, 40);
+			lv_obj_set_style_bg_color(ta, lv_color_black(), LV_PART_MAIN);
+			lv_obj_set_style_text_color(ta, lv_color_hex(0xAAAAAA), LV_PART_MAIN);
+			lv_obj_set_style_border_color(ta, lv_color_hex(0x666666), LV_PART_MAIN);
+			lv_obj_set_style_border_width(ta, 1, LV_PART_MAIN);
+			char bpm_str[4];
+			snprintf(bpm_str, sizeof(bpm_str), "%d", (int)g_synth_state.bpm);
+			lv_textarea_set_text(ta, bpm_str);
+			lv_textarea_set_one_line(ta, true);
+
+			// Keypad
+			lv_obj_t* kb = lv_keyboard_create(bpm_popup);
+			lv_obj_set_style_bg_opa(bpm_popup, LV_OPA_60, LV_PART_MAIN);
+			lv_obj_set_size(kb, 200, 180);
+			lv_obj_align(kb, LV_ALIGN_TOP_MID, 0, 90);
+			lv_keyboard_set_textarea(kb, ta);
+			static const char* custom_map[] = {
+				"1", "2",  "3",		 "\n", "4",
+				"5", "6",  "\n",	 "7",  "8",
+				"9", "\n", LV_SYMBOL_OK, "0",  LV_SYMBOL_BACKSPACE,
+				"",
+			};
+			static const lv_btnmatrix_ctrl_t control_map[] = {
+				0, 0,
+				0, 0,
+				0, 0,
+				0, 0,
+				0, LV_BTNMATRIX_CTRL_CLICK_TRIG,
+				0, LV_BTNMATRIX_CTRL_CLICK_TRIG,
+			};
+			lv_keyboard_set_map(kb, LV_KEYBOARD_MODE_USER_1, custom_map, control_map);
+			lv_keyboard_set_mode(kb, LV_KEYBOARD_MODE_USER_1);
+			lv_obj_set_style_bg_color(kb, lv_color_black(), LV_PART_MAIN);
+			lv_obj_set_style_text_color(kb, lv_color_hex(0xAAAAAA), LV_PART_MAIN);
+
+			// Add event to handle text area changes
+			lv_obj_add_event_cb(ta, bpm_keypad_event_cb, LV_EVENT_READY, NULL);
+		}
+	}
+}
+
+static void play_stop_event_cb(lv_event_t* e)
+{
+	lv_event_code_t code = lv_event_get_code(e);
+	if (code == LV_EVENT_CLICKED) {
+		lv_obj_t* btn = lv_event_get_target(e);
+
+		// Toggle sequencer running state
+		g_synth_state.sequencer_running = !g_synth_state.sequencer_running;
+
+		// Update button appearance and text
+		if (g_synth_state.sequencer_running) {
+			lv_obj_set_style_bg_color(btn, lv_color_hex(0x00AA22), LV_PART_MAIN);
+			lv_obj_t* label = lv_obj_get_child(btn, 0);
+			if (label)
+				lv_label_set_text(label, "STOP");
+			printf("Sequencer STARTED at %.1f BPM\n", g_synth_state.bpm);
+		} else {
+			lv_obj_set_style_bg_color(btn, lv_color_hex(0x333333), LV_PART_MAIN);
+			lv_obj_t* label = lv_obj_get_child(btn, 0);
+			if (label)
+				lv_label_set_text(label, "PLAY");
+			printf("Sequencer STOPPED\n");
+		}
+	}
+}
 
 static void close_scale_popup(lv_event_t* e)
 {
@@ -322,8 +449,10 @@ static void accent_toggle_cb(lv_event_t* e)
 			// Update button appearance
 			if (step->accent) {
 				lv_obj_set_style_bg_color(btn, lv_color_hex(0x00AA22), LV_PART_MAIN);
+				printf("Step %d: Accent ON\n", step_idx + 1);
 			} else {
 				lv_obj_set_style_bg_color(btn, lv_color_hex(0x333333), LV_PART_MAIN);
+				printf("Step %d: Accent OFF\n", step_idx + 1);
 			}
 		}
 	}
@@ -344,8 +473,10 @@ static void slide_toggle_cb(lv_event_t* e)
 			// Update button appearance
 			if (step->slide) {
 				lv_obj_set_style_bg_color(btn, lv_color_hex(0x00AA22), LV_PART_MAIN);
+				printf("Step %d: Slide ON\n", step_idx + 1);
 			} else {
 				lv_obj_set_style_bg_color(btn, lv_color_hex(0x333333), LV_PART_MAIN);
+				printf("Step %d: Slide OFF\n", step_idx + 1);
 			}
 		}
 	}
@@ -362,6 +493,8 @@ static void note_dropdown_cb(lv_event_t* e)
 		sequencer_step_t* step = synth_state_get_step(step_idx);
 		if (step) {
 			step->note_index = lv_dropdown_get_selected(dropdown);
+			printf("Step %d: Note changed to %s\n", step_idx + 1,
+			       get_note_name(get_scale_intervals(synth_state_get_scale())[step->note_index] % 12));
 		}
 	}
 }
@@ -529,8 +662,10 @@ static void step_button_event_cb(lv_event_t* e)
 			// Update button appearance
 			if (step->active) {
 				lv_obj_set_style_bg_color(btn, lv_color_hex(0x00AA22), LV_PART_MAIN);
+				printf("Step %d: ON\n", step_index + 1);
 			} else {
 				lv_obj_set_style_bg_color(btn, lv_color_hex(0x333333), LV_PART_MAIN);
+				printf("Step %d: OFF\n", step_index + 1);
 			}
 		}
 	}
@@ -655,16 +790,57 @@ static lv_obj_t* create_seq_screen(void)
 		}
 	}
 
-	// Scale button in top right corner
+	// Scale button in top left corner
 	lv_obj_t* scale_btn = lv_btn_create(sequencer_screen);
 	lv_obj_add_style(scale_btn, &style_scale_button, 0);
 	lv_obj_set_size(scale_btn, 80, 30);
-	lv_obj_align(scale_btn, LV_ALIGN_TOP_RIGHT, -10, 10);
+	lv_obj_align(scale_btn, LV_ALIGN_TOP_LEFT, 10, 10);
 	scale_btn_label = lv_label_create(scale_btn);
 	lv_label_set_text(scale_btn_label, get_scale_name(synth_state_get_scale()));
 	lv_obj_add_style(scale_btn_label, &style_step_label, 0);
 	lv_obj_center(scale_btn_label);
 	lv_obj_add_event_cb(scale_btn, scale_btn_event_cb, LV_EVENT_CLICKED, NULL);
+
+	// Transport controls container - positioned to the right of sequencer grid
+	lv_obj_t* transport_cont = lv_obj_create(sequencer_screen);
+	lv_obj_add_style(transport_cont, &style_tab_container, 0);
+	lv_obj_set_size(transport_cont, 80, 200);
+	lv_obj_align_to(transport_cont, grid_container, LV_ALIGN_OUT_RIGHT_MID, 20, 0);
+	lv_obj_set_flex_flow(transport_cont, LV_FLEX_FLOW_COLUMN);
+	lv_obj_set_flex_align(transport_cont, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+	// Play/Stop button
+	lv_obj_t* play_btn = lv_btn_create(transport_cont);
+	lv_obj_add_style(play_btn, &style_button, 0);
+	lv_obj_set_size(play_btn, 70, 40);
+	lv_obj_set_style_bg_color(play_btn, lv_color_hex(0x333333), LV_PART_MAIN);
+	lv_obj_set_style_border_color(play_btn, lv_color_hex(0x666666), LV_PART_MAIN);
+	lv_obj_set_style_border_width(play_btn, 1, LV_PART_MAIN);
+	lv_obj_t* play_label = lv_label_create(play_btn);
+	lv_label_set_text(play_label, "PLAY");
+	lv_obj_add_style(play_label, &style_button_label, 0);
+	lv_obj_center(play_label);
+	lv_obj_add_event_cb(play_btn, play_stop_event_cb, LV_EVENT_CLICKED, NULL);
+
+	// BPM label
+	lv_obj_t* bpm_title = lv_label_create(transport_cont);
+	lv_label_set_text(bpm_title, "BPM");
+	lv_obj_add_style(bpm_title, &style_button_label, 0);
+
+	// BPM button
+	lv_obj_t* bpm_btn = lv_btn_create(transport_cont);
+	lv_obj_set_size(bpm_btn, 70, 30);
+	lv_obj_set_style_bg_color(bpm_btn, lv_color_black(), LV_PART_MAIN);
+	lv_obj_set_style_border_color(bpm_btn, lv_color_hex(0x666666), LV_PART_MAIN);
+	lv_obj_set_style_border_width(bpm_btn, 1, LV_PART_MAIN);
+	lv_obj_set_style_radius(bpm_btn, 2, LV_PART_MAIN);
+	bpm_btn_label = lv_label_create(bpm_btn);
+	char bpm_text[16];
+	snprintf(bpm_text, sizeof(bpm_text), "%d", (int)g_synth_state.bpm);
+	lv_label_set_text(bpm_btn_label, bpm_text);
+	lv_obj_add_style(bpm_btn_label, &style_button_label, 0);
+	lv_obj_center(bpm_btn_label);
+	lv_obj_add_event_cb(bpm_btn, bpm_btn_event_cb, LV_EVENT_CLICKED, NULL);
 
 	// Menu positioned at bottom
 	lv_obj_t* menu = lv_obj_create(sequencer_screen);
