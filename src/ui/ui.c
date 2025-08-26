@@ -9,8 +9,6 @@ static lv_obj_t* params_screen;
 static lv_obj_t* sequencer_screen;
 static lv_obj_t* tabview;
 
-extern bool play_sine;
-
 // --------------------------
 // Styles
 // --------------------------
@@ -124,6 +122,27 @@ static void set_btn_event_cb(lv_event_t* e)
 static void (*menu_callbacks[])(lv_event_t*) = { par_btn_event_cb, seq_btn_event_cb, seq_btn_event_cb,
 						 seq_btn_event_cb };
 
+static void slider_event_cb(lv_event_t* e)
+{
+	lv_event_code_t code = lv_event_get_code(e);
+	if (code == LV_EVENT_VALUE_CHANGED) {
+		lv_obj_t*     slider = lv_event_get_target(e);
+		synth_param_t param  = (synth_param_t)(intptr_t)lv_event_get_user_data(e);
+
+		// Get slider value (0-100) and store in global state
+		int32_t value = lv_slider_get_value(slider);
+		synth_state_set_parameter(param, (uint8_t)value);
+		
+		// Debug output
+		const char* param_names[] = {
+			"CUTOFF", "RESONANCE", "ENVELOPE", "ACCENT",
+			"ATTACK", "DECAY", "SUSTAIN", "RELEASE", 
+			"DISTORTION", "DELAY", "REVERB", "VOLUME"
+		};
+		printf("Parameter changed: %s = %d\n", param_names[param], (int)value);
+	}
+}
+
 // --------------------------
 // Helper functions
 // --------------------------
@@ -212,19 +231,6 @@ static lv_obj_t* scale_popup	    = NULL;
 static lv_obj_t* step_popup	    = NULL;
 static int	 current_step_index = -1;
 static lv_obj_t* scale_btn_label    = NULL;
-
-static void slider_event_cb(lv_event_t* e)
-{
-	lv_event_code_t code = lv_event_get_code(e);
-	if (code == LV_EVENT_VALUE_CHANGED) {
-		lv_obj_t*     slider = lv_event_get_target(e);
-		synth_param_t param  = (synth_param_t)(intptr_t)lv_event_get_user_data(e);
-
-		// Get slider value (0-100) and store in global state
-		int32_t value = lv_slider_get_value(slider);
-		synth_state_set_parameter(param, (uint8_t)value);
-	}
-}
 
 static void close_scale_popup(lv_event_t* e)
 {
