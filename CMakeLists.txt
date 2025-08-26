@@ -11,18 +11,23 @@ add_subdirectory(submodules/lvgl)
 add_subdirectory(submodules/CMSIS-DSP)
 add_subdirectory(submodules/portaudio)
 
+# Library sources
+file(GLOB_RECURSE LIB_SOURCES "lib/**/*.c")
+
 # Core
 add_library(core
     src/main.c
     src/audio/audio.c
     src/ui/ui.c
     dsp/dsp.c
+    ${LIB_SOURCES}
 )
 
 target_include_directories(core PUBLIC
     src/audio
     src/ui
     dsp
+    lib
     submodules/CMSIS-DSP/Include
     submodules/CMSIS-DSP/Include/dsp
 )
