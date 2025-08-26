@@ -2,6 +2,7 @@
 #include <string.h>
 #include "ui.h"
 #include "scales/scales.h"
+#include "synth_state/synth_state.h"
 
 // Screens
 static lv_obj_t* params_screen;
@@ -126,7 +127,7 @@ static void (*menu_callbacks[])(lv_event_t*) = { par_btn_event_cb, seq_btn_event
 // --------------------------
 // Helper functions
 // --------------------------
-static lv_obj_t* create_slider(lv_obj_t* cont, const char* name)
+static lv_obj_t* create_slider(lv_obj_t* cont, const char* name, synth_param_t param)
 {
 	// Create container for slider and label
 	lv_obj_t* slider_cont = lv_obj_create(cont);
@@ -147,7 +148,13 @@ static lv_obj_t* create_slider(lv_obj_t* cont, const char* name)
 	lv_obj_add_style(slider, &style_slider_knob, LV_PART_KNOB);
 	lv_obj_set_size(slider, 30, lv_pct(80));
 	lv_slider_set_range(slider, 0, 100);
-	lv_slider_set_value(slider, 50, LV_ANIM_ON);
+
+	// Set initial value from global state
+	uint8_t initial_value = synth_state_get_parameter(param);
+	lv_slider_set_value(slider, initial_value, LV_ANIM_OFF);
+
+	// Add event callback
+	lv_obj_add_event_cb(slider, slider_event_cb, LV_EVENT_VALUE_CHANGED, (void*)(intptr_t)param);
 
 	return slider;
 }
@@ -169,42 +176,55 @@ static lv_obj_t* create_tab_flex(lv_obj_t* tab)
 static void create_tab_1(lv_obj_t* tab)
 {
 	lv_obj_t* cont = create_tab_flex(tab);
-	create_slider(cont, "CUT");
-	create_slider(cont, "RES");
-	create_slider(cont, "ENV");
-	create_slider(cont, "ACT");
+	create_slider(cont, "CUT", PARAM_CUTOFF);
+	create_slider(cont, "RES", PARAM_RESONANCE);
+	create_slider(cont, "ENV", PARAM_ENVELOPE);
+	create_slider(cont, "ACT", PARAM_ACCENT);
 }
 
 static void create_tab_2(lv_obj_t* tab)
 {
 	lv_obj_t* cont = create_tab_flex(tab);
-	create_slider(cont, "ATK");
-	create_slider(cont, "DEC");
-	create_slider(cont, "SUS");
-	create_slider(cont, "REL");
+	create_slider(cont, "ATK", PARAM_ATTACK);
+	create_slider(cont, "DEC", PARAM_DECAY);
+	create_slider(cont, "SUS", PARAM_SUSTAIN);
+	create_slider(cont, "REL", PARAM_RELEASE);
 }
 
 static void create_tab_3(lv_obj_t* tab)
 {
 	lv_obj_t* cont = create_tab_flex(tab);
-	create_slider(cont, "DST");
-	create_slider(cont, "DEL");
-	create_slider(cont, "REV");
-	create_slider(cont, "VOL");
+	create_slider(cont, "DST", PARAM_DISTORTION);
+	create_slider(cont, "DEL", PARAM_DELAY);
+	create_slider(cont, "REV", PARAM_REVERB);
+	create_slider(cont, "VOL", PARAM_VOLUME);
 }
 
-// Sequencer step state (16 steps, each can be on/off)
-static bool sequencer_steps[16] = { false };
+// UI state - all actual data now stored in g_synth_state
 
-// Step parameters for each step
-static step_params_t step_params[16] = { 0 };
-static int	     current_scale   = 0;  // Index of current scale
+// Parameter mapping for sliders
+static const synth_param_t tab1_params[] = { PARAM_CUTOFF, PARAM_RESONANCE, PARAM_ENVELOPE, PARAM_ACCENT };
+static const synth_param_t tab2_params[] = { PARAM_ATTACK, PARAM_DECAY, PARAM_SUSTAIN, PARAM_RELEASE };
+static const synth_param_t tab3_params[] = { PARAM_DISTORTION, PARAM_DELAY, PARAM_REVERB, PARAM_VOLUME };
 
 // Popup objects
 static lv_obj_t* scale_popup	    = NULL;
 static lv_obj_t* step_popup	    = NULL;
 static int	 current_step_index = -1;
 static lv_obj_t* scale_btn_label    = NULL;
+
+static void slider_event_cb(lv_event_t* e)
+{
+	lv_event_code_t code = lv_event_get_code(e);
+	if (code == LV_EVENT_VALUE_CHANGED) {
+		lv_obj_t*     slider = lv_event_get_target(e);
+		synth_param_t param  = (synth_param_t)(intptr_t)lv_event_get_user_data(e);
+
+		// Get slider value (0-100) and store in global state
+		int32_t value = lv_slider_get_value(slider);
+		synth_state_set_parameter(param, (uint8_t)value);
+	}
+}
 
 static void close_scale_popup(lv_event_t* e)
 {
@@ -218,13 +238,15 @@ static void scale_selected(lv_event_t* e)
 {
 	lv_obj_t* btn	      = lv_event_get_target(e);
 	int	  scale_index = (int)(intptr_t)lv_event_get_user_data(e);
-	current_scale	      = scale_index;
-	
+
+	// Update scale in global state
+	synth_state_set_scale(scale_index);
+
 	// Update scale button label
 	if (scale_btn_label) {
-		lv_label_set_text(scale_btn_label, get_scale_name(current_scale));
+		lv_label_set_text(scale_btn_label, get_scale_name(synth_state_get_scale()));
 	}
-	
+
 	close_scale_popup(e);
 }
 
@@ -256,7 +278,6 @@ static void create_scale_popup(void)
 
 		lv_obj_add_event_cb(btn, scale_selected, LV_EVENT_CLICKED, (void*)(intptr_t)i);
 	}
-
 }
 
 static void scale_btn_event_cb(lv_event_t* e)
@@ -284,17 +305,20 @@ static void accent_toggle_cb(lv_event_t* e)
 {
 	lv_event_code_t code = lv_event_get_code(e);
 	if (code == LV_EVENT_CLICKED) {
-		lv_obj_t* btn = lv_event_get_target(e);
-		int step_idx = (int)(intptr_t)lv_event_get_user_data(e);
-		
-		// Toggle accent state
-		step_params[step_idx].accent = !step_params[step_idx].accent;
-		
-		// Update button appearance
-		if (step_params[step_idx].accent) {
-			lv_obj_set_style_bg_color(btn, lv_color_hex(0x00AA22), LV_PART_MAIN);
-		} else {
-			lv_obj_set_style_bg_color(btn, lv_color_hex(0x333333), LV_PART_MAIN);
+		lv_obj_t* btn	   = lv_event_get_target(e);
+		int	  step_idx = (int)(intptr_t)lv_event_get_user_data(e);
+
+		// Toggle accent state in global state
+		sequencer_step_t* step = synth_state_get_step(step_idx);
+		if (step) {
+			step->accent = !step->accent;
+
+			// Update button appearance
+			if (step->accent) {
+				lv_obj_set_style_bg_color(btn, lv_color_hex(0x00AA22), LV_PART_MAIN);
+			} else {
+				lv_obj_set_style_bg_color(btn, lv_color_hex(0x333333), LV_PART_MAIN);
+			}
 		}
 	}
 }
@@ -303,17 +327,20 @@ static void slide_toggle_cb(lv_event_t* e)
 {
 	lv_event_code_t code = lv_event_get_code(e);
 	if (code == LV_EVENT_CLICKED) {
-		lv_obj_t* btn = lv_event_get_target(e);
-		int step_idx = (int)(intptr_t)lv_event_get_user_data(e);
-		
-		// Toggle slide state
-		step_params[step_idx].slide = !step_params[step_idx].slide;
-		
-		// Update button appearance
-		if (step_params[step_idx].slide) {
-			lv_obj_set_style_bg_color(btn, lv_color_hex(0x00AA22), LV_PART_MAIN);
-		} else {
-			lv_obj_set_style_bg_color(btn, lv_color_hex(0x333333), LV_PART_MAIN);
+		lv_obj_t* btn	   = lv_event_get_target(e);
+		int	  step_idx = (int)(intptr_t)lv_event_get_user_data(e);
+
+		// Toggle slide state in global state
+		sequencer_step_t* step = synth_state_get_step(step_idx);
+		if (step) {
+			step->slide = !step->slide;
+
+			// Update button appearance
+			if (step->slide) {
+				lv_obj_set_style_bg_color(btn, lv_color_hex(0x00AA22), LV_PART_MAIN);
+			} else {
+				lv_obj_set_style_bg_color(btn, lv_color_hex(0x333333), LV_PART_MAIN);
+			}
 		}
 	}
 }
@@ -323,10 +350,13 @@ static void note_dropdown_cb(lv_event_t* e)
 	lv_event_code_t code = lv_event_get_code(e);
 	if (code == LV_EVENT_VALUE_CHANGED) {
 		lv_obj_t* dropdown = lv_event_get_target(e);
-		int step_idx = (int)(intptr_t)lv_event_get_user_data(e);
-		
-		// Update note selection
-		step_params[step_idx].note = lv_dropdown_get_selected(dropdown);
+		int	  step_idx = (int)(intptr_t)lv_event_get_user_data(e);
+
+		// Update note selection in global state
+		sequencer_step_t* step = synth_state_get_step(step_idx);
+		if (step) {
+			step->note_index = lv_dropdown_get_selected(dropdown);
+		}
 	}
 }
 
@@ -340,7 +370,7 @@ static void create_step_popup(int step_index)
 	lv_obj_set_size(step_popup, 250, 300);
 	lv_obj_center(step_popup);
 	lv_obj_add_style(step_popup, &style_tab_container, 0);
-	
+
 	// Add 80% transparency to the popup
 	lv_obj_set_style_bg_opa(step_popup, LV_OPA_80, LV_PART_MAIN);
 
@@ -366,12 +396,11 @@ static void create_step_popup(int step_index)
 	lv_obj_set_style_border_color(note_dropdown, lv_color_hex(0x666666), LV_PART_MAIN);
 	lv_obj_set_style_border_width(note_dropdown, 1, LV_PART_MAIN);
 	lv_obj_set_style_radius(note_dropdown, 3, LV_PART_MAIN);
-	
 
 	// Build note options based on current scale
-	const int* intervals	= get_scale_intervals(current_scale);
+	const int* intervals	= get_scale_intervals(synth_state_get_scale());
 	char	   options[256] = "";
-	int note_count = 0;
+	int	   note_count	= 0;
 	for (int i = 0; i < 8 && intervals[i] >= 0; i++) {
 		if (i > 0)
 			strcat(options, "\n");
@@ -379,15 +408,18 @@ static void create_step_popup(int step_index)
 		note_count++;
 	}
 	lv_dropdown_set_options(note_dropdown, options);
-	
+
 	// Set selected note (clamp to available notes in current scale)
-	int selected_note = step_params[step_index].note;
+	sequencer_step_t* current_step	= synth_state_get_step(step_index);
+	int		  selected_note = current_step ? current_step->note_index : 0;
 	if (selected_note >= note_count) {
 		selected_note = 0;
-		step_params[step_index].note = 0; // Update stored value
+		if (current_step) {
+			current_step->note_index = 0;  // Update stored value
+		}
 	}
 	lv_dropdown_set_selected(note_dropdown, selected_note);
-	
+
 	// Create a custom style for the dropdown list
 	static lv_style_t dropdown_list_style;
 	lv_style_init(&dropdown_list_style);
@@ -395,13 +427,13 @@ static void create_step_popup(int step_index)
 	lv_style_set_text_color(&dropdown_list_style, lv_color_hex(0xAAAAAA));
 	lv_style_set_border_color(&dropdown_list_style, lv_color_hex(0x666666));
 	lv_style_set_border_width(&dropdown_list_style, 1);
-	
+
 	// Style for selected items
 	static lv_style_t dropdown_selected_style;
 	lv_style_init(&dropdown_selected_style);
 	lv_style_set_bg_color(&dropdown_selected_style, lv_color_hex(0x005522));
 	lv_style_set_text_color(&dropdown_selected_style, lv_color_hex(0xCCCCCC));
-	
+
 	// Apply styles to dropdown list
 	lv_obj_t* dropdown_list = lv_dropdown_get_list(note_dropdown);
 	if (dropdown_list) {
@@ -410,7 +442,7 @@ static void create_step_popup(int step_index)
 		lv_obj_add_style(dropdown_list, &dropdown_selected_style, LV_PART_SELECTED | LV_STATE_CHECKED);
 		lv_obj_add_style(dropdown_list, &dropdown_selected_style, LV_PART_SELECTED | LV_STATE_PRESSED);
 	}
-	
+
 	// Add event callback for dropdown
 	lv_obj_add_event_cb(note_dropdown, note_dropdown_cb, LV_EVENT_VALUE_CHANGED, (void*)(intptr_t)step_index);
 
@@ -419,7 +451,7 @@ static void create_step_popup(int step_index)
 	lv_obj_set_size(accent_btn, 20, 20);
 	lv_obj_align(accent_btn, LV_ALIGN_TOP_LEFT, 20, 120);
 	// Style button based on accent state
-	if (step_params[step_index].accent) {
+	if (current_step && current_step->accent) {
 		lv_obj_set_style_bg_color(accent_btn, lv_color_hex(0x00AA22), LV_PART_MAIN);
 	} else {
 		lv_obj_set_style_bg_color(accent_btn, lv_color_hex(0x333333), LV_PART_MAIN);
@@ -427,12 +459,12 @@ static void create_step_popup(int step_index)
 	lv_obj_set_style_border_color(accent_btn, lv_color_hex(0x666666), LV_PART_MAIN);
 	lv_obj_set_style_border_width(accent_btn, 1, LV_PART_MAIN);
 	lv_obj_set_style_radius(accent_btn, 2, LV_PART_MAIN);
-	
+
 	lv_obj_t* accent_label = lv_label_create(step_popup);
 	lv_label_set_text(accent_label, "Accent");
 	lv_obj_add_style(accent_label, &style_button_label, 0);
 	lv_obj_align(accent_label, LV_ALIGN_TOP_LEFT, 50, 125);
-	
+
 	// Add event callback for accent button
 	lv_obj_add_event_cb(accent_btn, accent_toggle_cb, LV_EVENT_CLICKED, (void*)(intptr_t)step_index);
 
@@ -441,7 +473,7 @@ static void create_step_popup(int step_index)
 	lv_obj_set_size(slide_btn, 20, 20);
 	lv_obj_align(slide_btn, LV_ALIGN_TOP_LEFT, 20, 160);
 	// Style button based on slide state
-	if (step_params[step_index].slide) {
+	if (current_step && current_step->slide) {
 		lv_obj_set_style_bg_color(slide_btn, lv_color_hex(0x00AA22), LV_PART_MAIN);
 	} else {
 		lv_obj_set_style_bg_color(slide_btn, lv_color_hex(0x333333), LV_PART_MAIN);
@@ -449,12 +481,12 @@ static void create_step_popup(int step_index)
 	lv_obj_set_style_border_color(slide_btn, lv_color_hex(0x666666), LV_PART_MAIN);
 	lv_obj_set_style_border_width(slide_btn, 1, LV_PART_MAIN);
 	lv_obj_set_style_radius(slide_btn, 2, LV_PART_MAIN);
-	
+
 	lv_obj_t* slide_label = lv_label_create(step_popup);
 	lv_label_set_text(slide_label, "Slide");
 	lv_obj_add_style(slide_label, &style_button_label, 0);
 	lv_obj_align(slide_label, LV_ALIGN_TOP_LEFT, 50, 165);
-	
+
 	// Add event callback for slide button
 	lv_obj_add_event_cb(slide_btn, slide_toggle_cb, LV_EVENT_CLICKED, (void*)(intptr_t)step_index);
 
@@ -479,18 +511,21 @@ static void step_button_event_cb(lv_event_t* e)
 	} else if (code == LV_EVENT_CLICKED) {
 		// Only toggle if it wasn't a long press
 		if (long_press_occurred) {
-			long_press_occurred = false; // Reset flag
-			return; // Don't toggle on long press
+			long_press_occurred = false;  // Reset flag
+			return;			      // Don't toggle on long press
 		}
-		
-		// Toggle step state
-		sequencer_steps[step_index] = !sequencer_steps[step_index];
 
-		// Update button appearance
-		if (sequencer_steps[step_index]) {
-			lv_obj_set_style_bg_color(btn, lv_color_hex(0x00AA22), LV_PART_MAIN);
-		} else {
-			lv_obj_set_style_bg_color(btn, lv_color_hex(0x333333), LV_PART_MAIN);
+		// Toggle step state in global state
+		sequencer_step_t* step = synth_state_get_step(step_index);
+		if (step) {
+			step->active = !step->active;
+
+			// Update button appearance
+			if (step->active) {
+				lv_obj_set_style_bg_color(btn, lv_color_hex(0x00AA22), LV_PART_MAIN);
+			} else {
+				lv_obj_set_style_bg_color(btn, lv_color_hex(0x333333), LV_PART_MAIN);
+			}
 		}
 	}
 }
@@ -620,7 +655,7 @@ static lv_obj_t* create_seq_screen(void)
 	lv_obj_set_size(scale_btn, 80, 30);
 	lv_obj_align(scale_btn, LV_ALIGN_TOP_RIGHT, -10, 10);
 	scale_btn_label = lv_label_create(scale_btn);
-	lv_label_set_text(scale_btn_label, get_scale_name(current_scale));
+	lv_label_set_text(scale_btn_label, get_scale_name(synth_state_get_scale()));
 	lv_obj_add_style(scale_btn_label, &style_step_label, 0);
 	lv_obj_center(scale_btn_label);
 	lv_obj_add_event_cb(scale_btn, scale_btn_event_cb, LV_EVENT_CLICKED, NULL);
@@ -643,6 +678,9 @@ static lv_obj_t* create_seq_screen(void)
 // --------------------------
 void ui_init(lv_display_t* disp)
 {
+	// Initialize global synthesizer state
+	synth_state_init();
+
 	init_styles();
 
 	params_screen	 = create_params_screen();
