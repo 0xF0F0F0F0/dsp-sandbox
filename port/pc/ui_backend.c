@@ -4,7 +4,6 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-/* Global input state */
 typedef struct {
 	int  x;
 	int  y;

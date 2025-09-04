@@ -232,6 +232,24 @@ static int	 current_step_index = -1;
 static lv_obj_t* scale_btn_label    = NULL;
 static lv_obj_t* bpm_btn_label	    = NULL;
 
+// Step button references for updating note labels
+static lv_obj_t* step_buttons[SEQUENCER_STEPS];
+static lv_obj_t* step_button_labels[SEQUENCER_STEPS];
+
+// Pattern button references
+static lv_obj_t* pattern_buttons[PATTERN_COUNT];
+static lv_obj_t* pattern_button_labels[PATTERN_COUNT];
+static lv_obj_t* pattern_chain_indicators[PATTERN_COUNT];
+
+// Forward declarations
+static void update_step_button_display(int step_index);
+static void update_all_step_buttons(void);
+static void update_all_pattern_buttons(void);
+static void step_update_timer_cb(lv_timer_t* timer);
+
+// Timer for periodic step indicator updates
+static lv_timer_t* step_update_timer = NULL;
+
 static void bpm_keypad_event_cb(lv_event_t* e)
 {
 	lv_event_code_t code = lv_event_get_code(e);
@@ -344,18 +362,50 @@ static void play_stop_event_cb(lv_event_t* e)
 
 		// Update button appearance and text
 		if (g_synth_state.sequencer_running) {
+			// Reset sequencer to step 0 of PAT1 when starting playback
+			g_synth_state.current_step = 0;
+
+			// Reset pattern playback: if patterns are chained, start from first in chain
+			// Otherwise, start from currently selected pattern
+			if (g_synth_state.chain_length > 0) {
+				g_synth_state.active_pattern = g_synth_state.chain_order[0];
+				g_synth_state.chain_position = 0;
+			} else {
+				g_synth_state.active_pattern = g_synth_state.current_pattern;
+				g_synth_state.chain_position = 0;
+			}
+
+			// Immediately update the UI to reflect the starting pattern
+			update_all_step_buttons();
+			update_all_pattern_buttons();
 			lv_obj_set_style_bg_color(btn, lv_color_hex(0x00AA22), LV_PART_MAIN);
 			lv_obj_t* label = lv_obj_get_child(btn, 0);
 			if (label)
 				lv_label_set_text(label, "STOP");
+
+			// Start step indicator timer (update every 50ms for smooth indication)
+			if (!step_update_timer) {
+				step_update_timer = lv_timer_create(step_update_timer_cb, 50, NULL);
+			}
+
 			printf("Sequencer STARTED at %.1f BPM\n", g_synth_state.bpm);
 		} else {
 			lv_obj_set_style_bg_color(btn, lv_color_hex(0x333333), LV_PART_MAIN);
 			lv_obj_t* label = lv_obj_get_child(btn, 0);
 			if (label)
 				lv_label_set_text(label, "PLAY");
+
+			// Stop step indicator timer
+			if (step_update_timer) {
+				lv_timer_del(step_update_timer);
+				step_update_timer = NULL;
+			}
+
 			printf("Sequencer STOPPED\n");
 		}
+
+		// Immediately update step button displays
+		update_all_step_buttons();
 	}
 }
 
@@ -482,19 +532,30 @@ static void slide_toggle_cb(lv_event_t* e)
 	}
 }
 
-static void note_dropdown_cb(lv_event_t* e)
+static void octave_up_cb(lv_event_t* e)
 {
 	lv_event_code_t code = lv_event_get_code(e);
-	if (code == LV_EVENT_VALUE_CHANGED) {
-		lv_obj_t* dropdown = lv_event_get_target(e);
-		int	  step_idx = (int)(intptr_t)lv_event_get_user_data(e);
+	if (code == LV_EVENT_CLICKED) {
+		int		  step_idx = (int)(intptr_t)lv_event_get_user_data(e);
+		sequencer_step_t* step	   = synth_state_get_step(step_idx);
+		if (step && step->octave < 2) {	 // Limit to +2 octaves
+			step->octave++;
+			update_step_button_display(step_idx);
+			printf("Step %d: Octave +%d\n", step_idx + 1, step->octave);
+		}
+	}
+}
 
-		// Update note selection in global state
-		sequencer_step_t* step = synth_state_get_step(step_idx);
-		if (step) {
-			step->note_index = lv_dropdown_get_selected(dropdown);
-			printf("Step %d: Note changed to %s\n", step_idx + 1,
-			       get_note_name(get_scale_intervals(synth_state_get_scale())[step->note_index] % 12));
+static void octave_down_cb(lv_event_t* e)
+{
+	lv_event_code_t code = lv_event_get_code(e);
+	if (code == LV_EVENT_CLICKED) {
+		int		  step_idx = (int)(intptr_t)lv_event_get_user_data(e);
+		sequencer_step_t* step	   = synth_state_get_step(step_idx);
+		if (step && step->octave > -2) {  // Limit to -2 octaves
+			step->octave--;
+			update_step_button_display(step_idx);
+			printf("Step %d: Octave %d\n", step_idx + 1, step->octave);
 		}
 	}
 }
@@ -520,75 +581,61 @@ static void create_step_popup(int step_index)
 	lv_obj_add_style(title, &style_button_label, 0);
 	lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 10);
 
-	// Note selection dropdown
-	lv_obj_t* note_label = lv_label_create(step_popup);
-	lv_label_set_text(note_label, "Note:");
-	lv_obj_add_style(note_label, &style_button_label, 0);
-	lv_obj_align(note_label, LV_ALIGN_TOP_LEFT, 10, 50);
+	// Note selection info (read-only, use long-press + drag to change)
+	lv_obj_t* note_info = lv_label_create(step_popup);
+	lv_label_set_text(note_info, "Note: Long-press + drag button to change");
+	lv_obj_add_style(note_info, &style_button_label, 0);
+	lv_obj_align(note_info, LV_ALIGN_TOP_MID, 0, 50);
 
-	lv_obj_t* note_dropdown = lv_dropdown_create(step_popup);
-	lv_obj_set_size(note_dropdown, 200, 30);
-	lv_obj_align(note_dropdown, LV_ALIGN_TOP_MID, 0, 70);
-	// Style dropdown main button to match theme
-	lv_obj_set_style_bg_color(note_dropdown, lv_color_black(), LV_PART_MAIN);
-	lv_obj_set_style_text_color(note_dropdown, lv_color_hex(0xAAAAAA), LV_PART_MAIN);
-	lv_obj_set_style_border_color(note_dropdown, lv_color_hex(0x666666), LV_PART_MAIN);
-	lv_obj_set_style_border_width(note_dropdown, 1, LV_PART_MAIN);
-	lv_obj_set_style_radius(note_dropdown, 3, LV_PART_MAIN);
+	// Octave controls
+	lv_obj_t* octave_label = lv_label_create(step_popup);
+	lv_label_set_text(octave_label, "Octave:");
+	lv_obj_add_style(octave_label, &style_button_label, 0);
+	lv_obj_align(octave_label, LV_ALIGN_TOP_LEFT, 20, 80);
 
-	// Build note options based on current scale
-	const int* intervals	= get_scale_intervals(synth_state_get_scale());
-	char	   options[256] = "";
-	int	   note_count	= 0;
-	for (int i = 0; i < 8 && intervals[i] >= 0; i++) {
-		if (i > 0)
-			strcat(options, "\n");
-		strcat(options, get_note_name(intervals[i] % 12));
-		note_count++;
-	}
-	lv_dropdown_set_options(note_dropdown, options);
+	// Octave down button
+	lv_obj_t* oct_down_btn = lv_btn_create(step_popup);
+	lv_obj_set_size(oct_down_btn, 30, 30);
+	lv_obj_align(oct_down_btn, LV_ALIGN_TOP_LEFT, 90, 75);
+	lv_obj_set_style_bg_color(oct_down_btn, lv_color_hex(0x333333), LV_PART_MAIN);
+	lv_obj_set_style_border_color(oct_down_btn, lv_color_hex(0x666666), LV_PART_MAIN);
+	lv_obj_set_style_border_width(oct_down_btn, 1, LV_PART_MAIN);
+	lv_obj_set_style_radius(oct_down_btn, 2, LV_PART_MAIN);
 
-	// Set selected note (clamp to available notes in current scale)
-	sequencer_step_t* current_step	= synth_state_get_step(step_index);
-	int		  selected_note = current_step ? current_step->note_index : 0;
-	if (selected_note >= note_count) {
-		selected_note = 0;
-		if (current_step) {
-			current_step->note_index = 0;  // Update stored value
-		}
-	}
-	lv_dropdown_set_selected(note_dropdown, selected_note);
+	lv_obj_t* oct_down_label = lv_label_create(oct_down_btn);
+	lv_label_set_text(oct_down_label, "-");
+	lv_obj_add_style(oct_down_label, &style_button_label, 0);
+	lv_obj_center(oct_down_label);
+	lv_obj_add_event_cb(oct_down_btn, octave_down_cb, LV_EVENT_CLICKED, (void*)(intptr_t)step_index);
 
-	// Create a custom style for the dropdown list
-	static lv_style_t dropdown_list_style;
-	lv_style_init(&dropdown_list_style);
-	lv_style_set_bg_color(&dropdown_list_style, lv_color_black());
-	lv_style_set_text_color(&dropdown_list_style, lv_color_hex(0xAAAAAA));
-	lv_style_set_border_color(&dropdown_list_style, lv_color_hex(0x666666));
-	lv_style_set_border_width(&dropdown_list_style, 1);
+	// Octave display
+	lv_obj_t*	  oct_display  = lv_label_create(step_popup);
+	sequencer_step_t* current_step = synth_state_get_step(step_index);
+	char		  octave_text[8];
+	snprintf(octave_text, sizeof(octave_text), "%+d", current_step ? current_step->octave : 0);
+	lv_label_set_text(oct_display, octave_text);
+	lv_obj_add_style(oct_display, &style_button_label, 0);
+	lv_obj_align(oct_display, LV_ALIGN_TOP_LEFT, 135, 85);
 
-	// Style for selected items
-	static lv_style_t dropdown_selected_style;
-	lv_style_init(&dropdown_selected_style);
-	lv_style_set_bg_color(&dropdown_selected_style, lv_color_hex(0x005522));
-	lv_style_set_text_color(&dropdown_selected_style, lv_color_hex(0xCCCCCC));
+	// Octave up button
+	lv_obj_t* oct_up_btn = lv_btn_create(step_popup);
+	lv_obj_set_size(oct_up_btn, 30, 30);
+	lv_obj_align(oct_up_btn, LV_ALIGN_TOP_LEFT, 160, 75);
+	lv_obj_set_style_bg_color(oct_up_btn, lv_color_hex(0x333333), LV_PART_MAIN);
+	lv_obj_set_style_border_color(oct_up_btn, lv_color_hex(0x666666), LV_PART_MAIN);
+	lv_obj_set_style_border_width(oct_up_btn, 1, LV_PART_MAIN);
+	lv_obj_set_style_radius(oct_up_btn, 2, LV_PART_MAIN);
 
-	// Apply styles to dropdown list
-	lv_obj_t* dropdown_list = lv_dropdown_get_list(note_dropdown);
-	if (dropdown_list) {
-		lv_obj_add_style(dropdown_list, &dropdown_list_style, LV_PART_MAIN);
-		lv_obj_add_style(dropdown_list, &dropdown_selected_style, LV_PART_SELECTED);
-		lv_obj_add_style(dropdown_list, &dropdown_selected_style, LV_PART_SELECTED | LV_STATE_CHECKED);
-		lv_obj_add_style(dropdown_list, &dropdown_selected_style, LV_PART_SELECTED | LV_STATE_PRESSED);
-	}
-
-	// Add event callback for dropdown
-	lv_obj_add_event_cb(note_dropdown, note_dropdown_cb, LV_EVENT_VALUE_CHANGED, (void*)(intptr_t)step_index);
+	lv_obj_t* oct_up_label = lv_label_create(oct_up_btn);
+	lv_label_set_text(oct_up_label, "+");
+	lv_obj_add_style(oct_up_label, &style_button_label, 0);
+	lv_obj_center(oct_up_label);
+	lv_obj_add_event_cb(oct_up_btn, octave_up_cb, LV_EVENT_CLICKED, (void*)(intptr_t)step_index);
 
 	// Accent toggle button and label
 	lv_obj_t* accent_btn = lv_btn_create(step_popup);
 	lv_obj_set_size(accent_btn, 20, 20);
-	lv_obj_align(accent_btn, LV_ALIGN_TOP_LEFT, 20, 120);
+	lv_obj_align(accent_btn, LV_ALIGN_TOP_LEFT, 20, 140);
 	// Style button based on accent state
 	if (current_step && current_step->accent) {
 		lv_obj_set_style_bg_color(accent_btn, lv_color_hex(0x00AA22), LV_PART_MAIN);
@@ -602,7 +649,7 @@ static void create_step_popup(int step_index)
 	lv_obj_t* accent_label = lv_label_create(step_popup);
 	lv_label_set_text(accent_label, "Accent");
 	lv_obj_add_style(accent_label, &style_button_label, 0);
-	lv_obj_align(accent_label, LV_ALIGN_TOP_LEFT, 50, 125);
+	lv_obj_align(accent_label, LV_ALIGN_TOP_LEFT, 50, 145);
 
 	// Add event callback for accent button
 	lv_obj_add_event_cb(accent_btn, accent_toggle_cb, LV_EVENT_CLICKED, (void*)(intptr_t)step_index);
@@ -610,7 +657,7 @@ static void create_step_popup(int step_index)
 	// Slide toggle button and label
 	lv_obj_t* slide_btn = lv_btn_create(step_popup);
 	lv_obj_set_size(slide_btn, 20, 20);
-	lv_obj_align(slide_btn, LV_ALIGN_TOP_LEFT, 20, 160);
+	lv_obj_align(slide_btn, LV_ALIGN_TOP_LEFT, 20, 180);
 	// Style button based on slide state
 	if (current_step && current_step->slide) {
 		lv_obj_set_style_bg_color(slide_btn, lv_color_hex(0x00AA22), LV_PART_MAIN);
@@ -624,7 +671,7 @@ static void create_step_popup(int step_index)
 	lv_obj_t* slide_label = lv_label_create(step_popup);
 	lv_label_set_text(slide_label, "Slide");
 	lv_obj_add_style(slide_label, &style_button_label, 0);
-	lv_obj_align(slide_label, LV_ALIGN_TOP_LEFT, 50, 165);
+	lv_obj_align(slide_label, LV_ALIGN_TOP_LEFT, 50, 185);
 
 	// Add event callback for slide button
 	lv_obj_add_event_cb(slide_btn, slide_toggle_cb, LV_EVENT_CLICKED, (void*)(intptr_t)step_index);
@@ -637,6 +684,185 @@ static void create_step_popup(int step_index)
 // Flag to prevent click after long press
 static bool long_press_occurred = false;
 
+// Drag state for note selection
+static bool	drag_mode		  = false;
+static int	drag_start_y		  = 0;
+static int	current_drag_step	  = -1;
+static uint32_t long_press_start_time	  = 0;
+static bool	note_changed_during_press = false;
+
+static void update_step_button_display(int step_index)
+{
+	if (step_index < 0 || step_index >= SEQUENCER_STEPS)
+		return;
+
+	sequencer_step_t* step = synth_state_get_step(step_index);
+	if (!step || !step_buttons[step_index] || !step_button_labels[step_index])
+		return;
+
+	// Update button color based on state priority: playing > active > inactive
+	// Only show the current step indicator for the currently active/playing pattern
+	lv_color_t bg_color;
+	if (g_synth_state.sequencer_running && step_index == g_synth_state.current_step &&
+	    g_synth_state.current_pattern == g_synth_state.active_pattern) {
+		// Currently playing step on the active pattern - bright theme color
+		bg_color = lv_color_hex(0x00FF44);  // Bright green for current step
+	} else if (step->active) {
+		// Active step but not currently playing
+		bg_color = lv_color_hex(0x00AA22);  // Normal green for active steps
+	} else {
+		// Inactive step
+		bg_color = lv_color_hex(0x333333);  // Dark gray for inactive steps
+	}
+	lv_obj_set_style_bg_color(step_buttons[step_index], bg_color, LV_PART_MAIN);
+
+	// Update note label
+	const int*  scale_intervals = get_scale_intervals(synth_state_get_scale());
+	const char* note_name	    = "C";
+	if (scale_intervals && step->note_index >= 0 && step->note_index < 8) {
+		int note  = scale_intervals[step->note_index] % 12;
+		note_name = get_note_name(note);
+	}
+	lv_label_set_text(step_button_labels[step_index], note_name);
+}
+
+// Update all step button displays (for current step indicator refresh)
+static void update_all_step_buttons(void)
+{
+	for (int i = 0; i < SEQUENCER_STEPS; i++) {
+		update_step_button_display(i);
+	}
+}
+
+static void step_update_timer_cb(lv_timer_t* timer)
+{
+	if (g_synth_state.sequencer_running) {
+		update_all_step_buttons();
+	}
+}
+
+// Pattern selection and chaining variables
+static int	pattern_long_press_index    = -1;
+static uint32_t pattern_long_press_start    = 0;
+static bool	pattern_long_press_occurred = false;
+
+// Update pattern button display based on state
+static void update_pattern_button_display(int pattern_index)
+{
+	if (pattern_index < 0 || pattern_index >= PATTERN_COUNT)
+		return;
+	if (!pattern_buttons[pattern_index] || !pattern_button_labels[pattern_index] ||
+	    !pattern_chain_indicators[pattern_index])
+		return;
+
+	// Update button background color (only selected vs not selected)
+	lv_color_t bg_color;
+	if (pattern_index == g_synth_state.current_pattern) {
+		// Currently selected pattern
+		bg_color = lv_color_hex(0x00AA22);  // Green for selected
+	} else {
+		// Not selected pattern
+		bg_color = lv_color_hex(0x333333);  // Dark gray for not selected
+	}
+	lv_obj_set_style_bg_color(pattern_buttons[pattern_index], bg_color, LV_PART_MAIN);
+
+	// Update chain indicator color
+	lv_color_t indicator_color;
+	if (synth_state_is_pattern_chained(pattern_index)) {
+		// Pattern is in chain - green indicator
+		indicator_color = lv_color_hex(0x00AA22);
+	} else {
+		// Pattern not in chain - gray indicator
+		indicator_color = lv_color_hex(0x666666);
+	}
+	lv_obj_set_style_bg_color(pattern_chain_indicators[pattern_index], indicator_color, LV_PART_MAIN);
+}
+
+// Update all pattern button displays
+static void update_all_pattern_buttons(void)
+{
+	for (int i = 0; i < PATTERN_COUNT; i++) {
+		update_pattern_button_display(i);
+	}
+}
+
+static void pattern_button_event_cb(lv_event_t* e)
+{
+	lv_event_code_t code	      = lv_event_get_code(e);
+	int		pattern_index = (int)(intptr_t)lv_event_get_user_data(e);
+
+	if (code == LV_EVENT_LONG_PRESSED) {
+		// Start pattern chaining mode
+		pattern_long_press_index    = pattern_index;
+		pattern_long_press_start    = lv_tick_get();
+		pattern_long_press_occurred = true;
+		printf("Pattern %d: Long press - chaining mode active (press other patterns to chain)\n",
+		       pattern_index + 1);
+
+	} else if (code == LV_EVENT_PRESSED) {
+		// Check if we're in chaining mode and this is a different pattern
+		// Using PRESSED instead of HOVER_OVER for more reliable detection
+		if (pattern_long_press_index >= 0 && pattern_long_press_index != pattern_index &&
+		    (lv_tick_get() - pattern_long_press_start) < 3000) {
+			printf("Pattern %d: Detected chaining attempt with pattern %d\n", pattern_long_press_index + 1,
+			       pattern_index + 1);
+
+			// Handle chaining logic on hover/press
+			bool first_chained  = synth_state_is_pattern_chained(pattern_long_press_index);
+			bool second_chained = synth_state_is_pattern_chained(pattern_index);
+
+			if (first_chained && second_chained) {
+				// Both chained - remove the first one from chain
+				synth_state_unchain_pattern(pattern_long_press_index);
+				printf("Pattern %d: Removed from chain\n", pattern_long_press_index + 1);
+			} else if (!first_chained && !second_chained) {
+				// Neither chained - chain both
+				synth_state_chain_pattern(pattern_long_press_index);
+				synth_state_chain_pattern(pattern_index);
+				printf("Pattern %d and %d: Chained together\n", pattern_long_press_index + 1,
+				       pattern_index + 1);
+			} else {
+				// One chained, one not - add the unchained one to chain
+				if (!first_chained)
+					synth_state_chain_pattern(pattern_long_press_index);
+				if (!second_chained)
+					synth_state_chain_pattern(pattern_index);
+				printf("Pattern %d: Added to existing chain\n",
+				       (!first_chained ? pattern_long_press_index : pattern_index) + 1);
+			}
+
+			update_all_pattern_buttons();
+
+			// Reset chaining mode after chaining operation
+			pattern_long_press_index    = -1;
+			pattern_long_press_occurred = false;
+			return;
+		}
+
+	} else if (code == LV_EVENT_CLICKED) {
+		// Don't process click if it's from a long press release
+		if (pattern_long_press_occurred && pattern_index == pattern_long_press_index) {
+			pattern_long_press_occurred = false;  // Reset flag but stay in chaining mode
+			printf("Pattern %d: Ignoring click after long press\n", pattern_index + 1);
+			return;
+		}
+
+		// Reset chaining mode if clicking outside chaining window
+		if (pattern_long_press_index >= 0 && (lv_tick_get() - pattern_long_press_start) >= 3000) {
+			pattern_long_press_index    = -1;
+			pattern_long_press_occurred = false;
+		}
+
+		// Normal pattern selection (if not in chaining mode)
+		if (pattern_long_press_index < 0) {
+			synth_state_set_current_pattern(pattern_index);
+			update_all_pattern_buttons();
+			update_all_step_buttons();  // Refresh step buttons for new pattern
+			printf("Pattern %d: Selected\n", pattern_index + 1);
+		}
+	}
+}
+
 static void step_button_event_cb(lv_event_t* e)
 {
 	lv_event_code_t code	   = lv_event_get_code(e);
@@ -644,29 +870,93 @@ static void step_button_event_cb(lv_event_t* e)
 	int		step_index = (int)(intptr_t)lv_event_get_user_data(e);
 
 	if (code == LV_EVENT_LONG_PRESSED) {
-		// Set flag and open step parameter popup
-		long_press_occurred = true;
-		create_step_popup(step_index);
+		// Enter drag mode for note selection and start timing
+		long_press_occurred	  = true;
+		drag_mode		  = true;
+		current_drag_step	  = step_index;
+		long_press_start_time	  = lv_tick_get();
+		note_changed_during_press = false;
+
+		// Get initial Y position
+		lv_indev_t* indev = lv_indev_get_act();
+		if (indev) {
+			lv_point_t point;
+			lv_indev_get_point(indev, &point);
+			drag_start_y = point.y;
+		}
+
+		printf("Step %d: Long press - entering drag mode\n", step_index + 1);
+
+	} else if (code == LV_EVENT_PRESSING && drag_mode && current_drag_step == step_index) {
+		// Check if 1 second has passed without note change - open popup first
+		if (!note_changed_during_press && (lv_tick_get() - long_press_start_time) > 1000) {
+			drag_mode	    = false;  // Exit drag mode
+			current_drag_step   = -1;
+			long_press_occurred = false;  // Reset to allow popup interaction
+			create_step_popup(step_index);
+			printf("Step %d: Opening popup after 1-second delay\n", step_index + 1);
+			return;	 // Exit early to prevent drag processing
+		}
+
+		// Handle drag for note selection
+		lv_indev_t* indev = lv_indev_get_act();
+		if (indev) {
+			lv_point_t point;
+			lv_indev_get_point(indev, &point);
+			int drag_delta = drag_start_y - point.y;  // Negative = drag down, positive = drag up
+
+			// Calculate note change based on drag distance (every 8 pixels = 1 note, more sensitive)
+			int note_change = drag_delta / 8;
+
+			sequencer_step_t* step = synth_state_get_step(step_index);
+			if (step) {
+				const int* scale_intervals = get_scale_intervals(synth_state_get_scale());
+				int	   scale_length	   = 0;
+				while (scale_length < 8 && scale_intervals[scale_length] >= 0) scale_length++;
+
+				int new_note_index = step->note_index + note_change;
+
+				// Clamp to scale range
+				if (new_note_index < 0)
+					new_note_index = 0;
+				if (new_note_index >= scale_length)
+					new_note_index = scale_length - 1;
+
+				if (new_note_index != step->note_index) {
+					step->note_index	  = new_note_index;
+					note_changed_during_press = true;  // Mark that note changed
+					update_step_button_display(step_index);
+
+					const char* note_name = get_note_name(scale_intervals[new_note_index] % 12);
+					printf("Step %d: Note changed to %s\n", step_index + 1, note_name);
+
+					// Update drag start position to prevent continuous jumping
+					drag_start_y = point.y;
+				}
+			}
+		}
+
+	} else if (code == LV_EVENT_RELEASED) {
+		// Exit drag mode
+		if (drag_mode) {
+			drag_mode	  = false;
+			current_drag_step = -1;
+			printf("Step %d: Released - exiting drag mode\n", step_index + 1);
+		}
+
 	} else if (code == LV_EVENT_CLICKED) {
-		// Only toggle if it wasn't a long press
-		if (long_press_occurred) {
+		// Only toggle if it wasn't a long press or drag
+		if (long_press_occurred || drag_mode) {
 			long_press_occurred = false;  // Reset flag
-			return;			      // Don't toggle on long press
+			return;			      // Don't toggle on long press or drag
 		}
 
 		// Toggle step state in global state
 		sequencer_step_t* step = synth_state_get_step(step_index);
 		if (step) {
 			step->active = !step->active;
-
-			// Update button appearance
-			if (step->active) {
-				lv_obj_set_style_bg_color(btn, lv_color_hex(0x00AA22), LV_PART_MAIN);
-				printf("Step %d: ON\n", step_index + 1);
-			} else {
-				lv_obj_set_style_bg_color(btn, lv_color_hex(0x333333), LV_PART_MAIN);
-				printf("Step %d: OFF\n", step_index + 1);
-			}
+			update_step_button_display(step_index);
+			printf("Step %d: %s\n", step_index + 1, step->active ? "ON" : "OFF");
 		}
 	}
 }
@@ -752,11 +1042,76 @@ static lv_obj_t* create_seq_screen(void)
 	sequencer_screen = lv_obj_create(NULL);
 	lv_obj_add_style(sequencer_screen, &style_screen, 0);
 
-	// Grid container centered on screen
+	// Pattern buttons container - PAT buttons aligned with scale button center
+	// Scale button center: x=50 (x=10, width=80)
+	// PAT buttons: width=45, so to center at x=50, they start at x=27.5
+	// Indicators: width=8 + gap=3 = 11px before button
+	// Container starts at x=16.5 so buttons center aligns with scale button
+	lv_obj_t* pattern_container = lv_obj_create(sequencer_screen);
+	lv_obj_add_style(pattern_container, &style_tab_container, 0);
+	lv_obj_set_size(pattern_container, 70, 240);
+	lv_obj_align(pattern_container, LV_ALIGN_LEFT_MID, 17, 0);  // x=17 for PAT button alignment
+	lv_obj_set_flex_flow(pattern_container, LV_FLEX_FLOW_COLUMN);
+	lv_obj_set_flex_align(pattern_container, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+	lv_obj_set_style_pad_all(pattern_container, 5, 0);
+	lv_obj_set_style_pad_gap(pattern_container, 8, 0);
+
+	// Create 4 pattern buttons (PAT1-PAT4)
+	const char* pattern_names[] = { "PAT1", "PAT2", "PAT3", "PAT4" };
+	for (int i = 0; i < PATTERN_COUNT; i++) {
+		// Create button container to hold both button and indicator
+		lv_obj_t* btn_container = lv_obj_create(pattern_container);
+		lv_obj_add_style(btn_container, &style_tab_container, 0);
+		lv_obj_set_size(btn_container, 60, 40);
+		lv_obj_set_layout(btn_container, LV_LAYOUT_FLEX);
+		lv_obj_set_flex_flow(btn_container, LV_FLEX_FLOW_ROW);
+		lv_obj_set_flex_align(btn_container, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+		lv_obj_set_style_pad_all(btn_container, 2, 0);
+		lv_obj_set_style_pad_gap(btn_container, 3, 0);
+
+		// Create circular chain indicator on the left
+		lv_obj_t* indicator	    = lv_obj_create(btn_container);
+		pattern_chain_indicators[i] = indicator;
+		lv_obj_set_size(indicator, 8, 8);
+		lv_obj_set_style_radius(indicator, LV_RADIUS_CIRCLE, LV_PART_MAIN);
+		lv_obj_set_style_border_width(indicator, 0, LV_PART_MAIN);
+		// Initial color - gray for not chained
+		lv_obj_set_style_bg_color(indicator, lv_color_hex(0x666666), LV_PART_MAIN);
+
+		// Create the main pattern button
+		lv_obj_t* btn = lv_btn_create(btn_container);
+		lv_obj_set_size(btn, 45, 36);
+
+		// Store reference to button
+		pattern_buttons[i] = btn;
+
+		// Style the button
+		lv_color_t bg_color = (i == g_synth_state.current_pattern) ? lv_color_hex(0x00AA22) :
+									     lv_color_hex(0x333333);
+		lv_obj_set_style_bg_color(btn, bg_color, LV_PART_MAIN);
+		lv_obj_set_style_border_color(btn, lv_color_hex(0x666666), LV_PART_MAIN);
+		lv_obj_set_style_border_width(btn, 1, LV_PART_MAIN);
+		lv_obj_set_style_radius(btn, 3, LV_PART_MAIN);
+
+		// Add pattern label
+		lv_obj_t* label		 = lv_label_create(btn);
+		pattern_button_labels[i] = label;
+		lv_label_set_text(label, pattern_names[i]);
+		lv_obj_set_style_text_color(label, lv_color_white(), LV_PART_MAIN);
+		// Use default font size for pattern labels
+		lv_obj_center(label);
+
+		// Add event callbacks
+		lv_obj_add_event_cb(btn, pattern_button_event_cb, LV_EVENT_CLICKED, (void*)(intptr_t)i);
+		lv_obj_add_event_cb(btn, pattern_button_event_cb, LV_EVENT_LONG_PRESSED, (void*)(intptr_t)i);
+		lv_obj_add_event_cb(btn, pattern_button_event_cb, LV_EVENT_PRESSED, (void*)(intptr_t)i);
+	}
+
+	// Grid container centered on screen (with pattern buttons on left balancing transport on right)
 	lv_obj_t* grid_container = lv_obj_create(sequencer_screen);
 	lv_obj_add_style(grid_container, &style_tab_container, 0);
 	lv_obj_set_size(grid_container, 240, 240);
-	lv_obj_center(grid_container);
+	lv_obj_center(grid_container);	// Center the grid
 	lv_obj_set_layout(grid_container, LV_LAYOUT_GRID);
 	lv_obj_set_style_pad_all(grid_container, 8, 0);
 	lv_obj_set_style_pad_gap(grid_container, 4, 0);
@@ -777,16 +1132,36 @@ static lv_obj_t* create_seq_screen(void)
 			lv_obj_set_size(btn, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
 			lv_obj_set_grid_cell(btn, LV_GRID_ALIGN_STRETCH, col, 1, LV_GRID_ALIGN_STRETCH, row, 1);
 
+			// Store reference to button
+			step_buttons[step_index] = btn;
+
 			// Style the button to be square
-			lv_obj_set_style_bg_color(btn, lv_color_hex(0x333333), LV_PART_MAIN);
+			sequencer_step_t* step = synth_state_get_step(step_index);
+			lv_color_t bg_color = (step && step->active) ? lv_color_hex(0x00AA22) : lv_color_hex(0x333333);
+			lv_obj_set_style_bg_color(btn, bg_color, LV_PART_MAIN);
 			lv_obj_set_style_border_color(btn, lv_color_hex(0x666666), LV_PART_MAIN);
 			lv_obj_set_style_border_width(btn, 1, LV_PART_MAIN);
 			lv_obj_set_style_radius(btn, 2, LV_PART_MAIN);
 
-			// Add event callbacks for click and long press with step index as user data
+			// Add note label to button
+			lv_obj_t* label		       = lv_label_create(btn);
+			step_button_labels[step_index] = label;
+			const int*  scale_intervals    = get_scale_intervals(synth_state_get_scale());
+			const char* note_name	       = "C";
+			if (step && scale_intervals && step->note_index >= 0 && step->note_index < 8) {
+				int note  = scale_intervals[step->note_index] % 12;
+				note_name = get_note_name(note);
+			}
+			lv_label_set_text(label, note_name);
+			lv_obj_set_style_text_color(label, lv_color_black(), LV_PART_MAIN);
+			lv_obj_center(label);
+
+			// Add event callbacks for click, long press, and drag
 			lv_obj_add_event_cb(btn, step_button_event_cb, LV_EVENT_CLICKED, (void*)(intptr_t)step_index);
 			lv_obj_add_event_cb(btn, step_button_event_cb, LV_EVENT_LONG_PRESSED,
 					    (void*)(intptr_t)step_index);
+			lv_obj_add_event_cb(btn, step_button_event_cb, LV_EVENT_PRESSING, (void*)(intptr_t)step_index);
+			lv_obj_add_event_cb(btn, step_button_event_cb, LV_EVENT_RELEASED, (void*)(intptr_t)step_index);
 		}
 	}
 
@@ -801,35 +1176,37 @@ static lv_obj_t* create_seq_screen(void)
 	lv_obj_center(scale_btn_label);
 	lv_obj_add_event_cb(scale_btn, scale_btn_event_cb, LV_EVENT_CLICKED, NULL);
 
-	// Transport controls container - positioned to the right of sequencer grid
+	// Transport controls container - positioned to the right to balance pattern buttons on left
 	lv_obj_t* transport_cont = lv_obj_create(sequencer_screen);
 	lv_obj_add_style(transport_cont, &style_tab_container, 0);
-	lv_obj_set_size(transport_cont, 80, 200);
-	lv_obj_align_to(transport_cont, grid_container, LV_ALIGN_OUT_RIGHT_MID, 20, 0);
+	lv_obj_set_size(transport_cont, 70, 200);
+	lv_obj_align(transport_cont, LV_ALIGN_RIGHT_MID, -5, 0);  // Right side with small margin
 	lv_obj_set_flex_flow(transport_cont, LV_FLEX_FLOW_COLUMN);
 	lv_obj_set_flex_align(transport_cont, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-	// Play/Stop button
+	// Play/Stop button - smaller to fit balanced layout
 	lv_obj_t* play_btn = lv_btn_create(transport_cont);
 	lv_obj_add_style(play_btn, &style_button, 0);
-	lv_obj_set_size(play_btn, 70, 40);
+	lv_obj_set_size(play_btn, 60, 35);
 	lv_obj_set_style_bg_color(play_btn, lv_color_hex(0x333333), LV_PART_MAIN);
 	lv_obj_set_style_border_color(play_btn, lv_color_hex(0x666666), LV_PART_MAIN);
 	lv_obj_set_style_border_width(play_btn, 1, LV_PART_MAIN);
 	lv_obj_t* play_label = lv_label_create(play_btn);
 	lv_label_set_text(play_label, "PLAY");
 	lv_obj_add_style(play_label, &style_button_label, 0);
+	// Use default font for play button
 	lv_obj_center(play_label);
 	lv_obj_add_event_cb(play_btn, play_stop_event_cb, LV_EVENT_CLICKED, NULL);
 
-	// BPM label
+	// BPM label - smaller
 	lv_obj_t* bpm_title = lv_label_create(transport_cont);
 	lv_label_set_text(bpm_title, "BPM");
 	lv_obj_add_style(bpm_title, &style_button_label, 0);
+	// Use default font for BPM title
 
-	// BPM button
+	// BPM button - smaller
 	lv_obj_t* bpm_btn = lv_btn_create(transport_cont);
-	lv_obj_set_size(bpm_btn, 70, 30);
+	lv_obj_set_size(bpm_btn, 60, 25);
 	lv_obj_set_style_bg_color(bpm_btn, lv_color_black(), LV_PART_MAIN);
 	lv_obj_set_style_border_color(bpm_btn, lv_color_hex(0x666666), LV_PART_MAIN);
 	lv_obj_set_style_border_width(bpm_btn, 1, LV_PART_MAIN);
@@ -839,6 +1216,7 @@ static lv_obj_t* create_seq_screen(void)
 	snprintf(bpm_text, sizeof(bpm_text), "%d", (int)g_synth_state.bpm);
 	lv_label_set_text(bpm_btn_label, bpm_text);
 	lv_obj_add_style(bpm_btn_label, &style_button_label, 0);
+	// Use default font for BPM button label
 	lv_obj_center(bpm_btn_label);
 	lv_obj_add_event_cb(bpm_btn, bpm_btn_event_cb, LV_EVENT_CLICKED, NULL);
 
@@ -867,6 +1245,9 @@ void ui_init(lv_display_t* disp)
 
 	params_screen	 = create_params_screen();
 	sequencer_screen = create_seq_screen();
+
+	// Initialize pattern button displays
+	update_all_pattern_buttons();
 
 	lv_scr_load(params_screen);
 }

@@ -1,7 +1,10 @@
 #ifndef UI_BACKEND_H
 #define UI_BACKEND_H
 
-/* Initialize display + input backend for LVGL */
-void ui_backend_init(void);
+#include "lvgl.h"
+
+/* Initialize the platform-specific backend (LCD + input) */
+lv_display_t* ui_backend_init(void);
+void	      poll_input_events(void);
 
 #endif	// UI_BACKEND_H

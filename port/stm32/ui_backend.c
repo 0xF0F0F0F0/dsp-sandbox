@@ -1,6 +1,6 @@
 #include "ui_backend.h"
 #include "lvgl.h"
-#include "stm32f4xx_hal.h"  // replace with your MCU header
+// TODO: #include "stm32f4xx_hal.h"  // Add when actual HAL is available
 
 static lv_color_t    buf1[LV_HOR_RES * 40];
 static lv_display_t* disp;
@@ -36,7 +36,7 @@ static void touch_read_cb(lv_indev_t* indev, lv_indev_data_t* data)
 }
 
 /* Public init function */
-void ui_backend_init(void)
+lv_display_t* ui_backend_init(void)
 {
 	// Initialize LCD, DMA2D, Touch, etc.
 	// LCD_Init();
@@ -49,4 +49,13 @@ void ui_backend_init(void)
 	lv_indev_t* touch = lv_indev_create();
 	lv_indev_set_type(touch, LV_INDEV_TYPE_POINTER);
 	lv_indev_set_read_cb(touch, touch_read_cb);
+
+	return disp;
+}
+
+void poll_sdl_events(void)
+{
+	// TODO: Poll touchscreen events for STM32
+	// This function is called from main loop to update touch state
+	// For STM32, this might poll I2C/SPI touchscreen controller
 }

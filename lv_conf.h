@@ -1,7 +1,6 @@
 #ifndef LV_CONF_H
 #define LV_CONF_H
 
-/* Your configuration here */
 #define LV_HOR_RES 480
 #define LV_VER_RES 320
 #define LV_COLOR_DEPTH 16

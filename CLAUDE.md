@@ -1,0 +1,1 @@
+- always format the code according to the given clang format/tidy

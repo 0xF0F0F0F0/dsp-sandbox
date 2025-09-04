@@ -1,10 +1,9 @@
-#include <stdlib.h>
 #include <stdio.h>
 #include "ui.h"
 #include "ui_backend.h"
-#include "portaudio.h"
+#include "audio_driver.h"
+#include "dsp.h"
 #include <SDL2/SDL.h>
-#include <arm_math.h>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -12,59 +11,32 @@
 #include <unistd.h>
 #endif
 
-#define SAMPLE_RATE 44100
-#define FREQ 200.0
-#define AMPLITUDE 0.2
-
-/* Playback state */
-bool		 play_sine = false;
-static float32_t phase	   = 0.0;
-static float32_t phase_inc = 2.0f * PI * FREQ / SAMPLE_RATE;
-
-static void generate_sine(float* out, uint32_t n)
-{
-	for (uint32_t i = 0; i < n; i++) {
-		float32_t sample = play_sine ? arm_sin_f32(phase) : 0.0f;
-		*out++		 = sample;  // left
-		*out++		 = sample;  // right
-		phase += phase_inc;
-		if (phase >= 2.0f * PI) {
-			phase -= 2.0f * PI;
-		}
-	}
-}
-
-/* PortAudio callback */
-static int pa_callback(const void* inputBuffer, void* outputBuffer, unsigned long framesPerBuffer,
-		       const PaStreamCallbackTimeInfo* timeInfo, PaStreamCallbackFlags statusFlags, void* userData)
-{
-	(void)inputBuffer;
-	(void)timeInfo;
-	(void)statusFlags;
-	(void)userData;
-
-	float* out = (float*)outputBuffer;
-	generate_sine(out, framesPerBuffer);
-
-	return paContinue;
-}
-
 static Uint32 last_tick = 0;
 
 int main(void)
 {
+	// Initialize LVGL
 	lv_init();
 	lv_display_t* disp = ui_backend_init();
 	ui_init(disp);
 
-	// initialize PortAudio
-	Pa_Initialize();
-	PaStream* stream;
-	Pa_OpenDefaultStream(&stream, 0, 2,  // no input, 2 output channels
-			     paFloat32, SAMPLE_RATE,
-			     256,  // frames per buffer
-			     pa_callback, NULL);
-	Pa_StartStream(stream);
+	// Initialize DSP engine
+	dsp_init();
+
+	// Initialize audio driver
+	if (!audio_driver_init()) {
+		fprintf(stderr, "Failed to initialize audio driver\n");
+		return 1;
+	}
+
+	// Start audio processing
+	if (!audio_driver_start()) {
+		fprintf(stderr, "Failed to start audio driver\n");
+		audio_driver_cleanup();
+		return 1;
+	}
+
+	printf("Audio system started successfully\n");
 
 	last_tick = SDL_GetTicks();
 
@@ -83,7 +55,10 @@ int main(void)
 		SDL_Delay(1);  // small sleep
 	}
 
-	/* Pa_StopStream(stream); */
-	/* Pa_CloseStream(stream); */
-	/* Pa_Terminate(); */
+	// Cleanup (unreachable in current implementation)
+	audio_driver_stop();
+	audio_driver_cleanup();
+	dsp_cleanup();
+
+	return 0;
 }
