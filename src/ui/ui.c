@@ -9,6 +9,7 @@
 // Screens
 static lv_obj_t* params_screen;
 static lv_obj_t* sequencer_screen;
+static lv_obj_t* settings_screen;
 static lv_obj_t* tabview;
 
 // --------------------------
@@ -122,11 +123,11 @@ static void set_btn_event_cb(lv_event_t* e)
 {
 	lv_event_code_t code = lv_event_get_code(e);
 	if (code == LV_EVENT_CLICKED) {
-		lv_scr_load(sequencer_screen);
+		lv_scr_load(settings_screen);
 	}
 }
 
-static void (*menu_callbacks[])(lv_event_t*) = {par_btn_event_cb, seq_btn_event_cb, seq_btn_event_cb, seq_btn_event_cb};
+static void (*menu_callbacks[])(lv_event_t*) = {par_btn_event_cb, seq_btn_event_cb, seq_btn_event_cb, set_btn_event_cb};
 
 static void slider_event_cb(lv_event_t* e)
 {
@@ -245,6 +246,8 @@ static lv_obj_t* step_button_labels[SEQUENCER_STEPS];
 static lv_obj_t* pattern_buttons[PATTERN_COUNT];
 static lv_obj_t* pattern_button_labels[PATTERN_COUNT];
 static lv_obj_t* pattern_chain_indicators[PATTERN_COUNT];
+static lv_obj_t* rand_button;
+static lv_obj_t* density_slider;
 
 // Forward declarations
 static void update_step_button_display(int step_index);
@@ -783,6 +786,64 @@ static void update_all_pattern_buttons(void)
 	}
 }
 
+// Randomize a pattern with steps and notes using density slider
+static void randomize_pattern(int pattern_index)
+{
+	if (pattern_index < 0 || pattern_index >= PATTERN_COUNT) {
+		return;
+	}
+
+	// Seed random number generator (using current time for variety)
+	static bool seeded = false;
+	if (!seeded) {
+		srand((unsigned int)lv_tick_get());
+		seeded = true;
+	}
+
+	// Get density from slider (30-100%)
+	int density_percent = lv_slider_get_value(density_slider);
+	printf("Randomizing pattern %d with %d%% density\n", pattern_index + 1, density_percent);
+
+	// Randomize each step
+	for (int step = 0; step < SEQUENCER_STEPS; step++) {
+		sequencer_step_t* step_data = synth_state_get_step_from_pattern(pattern_index, step);
+		if (!step_data) continue;
+
+		// Use density slider value for chance of step being active
+		step_data->active = (rand() % 100) < density_percent;
+
+		if (step_data->active) {
+			// Random note in scale (0-7)
+			step_data->note_index = rand() % 8;
+
+			// 20% chance for accent
+			step_data->accent = (rand() % 100) < 20;
+
+			// 10% chance for slide
+			step_data->slide = (rand() % 100) < 10;
+		} else {
+			// Clear inactive step properties
+			step_data->note_index = 0;
+			step_data->octave = 0;
+			step_data->accent = false;
+			step_data->slide = false;
+		}
+	}
+
+	// Update UI to show changes
+	update_all_step_buttons();
+	printf("Pattern %d randomized\n", pattern_index + 1);
+}
+
+static void rand_button_event_cb(lv_event_t* e)
+{
+	lv_event_code_t code = lv_event_get_code(e);
+	if (code == LV_EVENT_CLICKED) {
+		int current_pattern = synth_state_get_current_pattern();
+		randomize_pattern(current_pattern);
+	}
+}
+
 static void pattern_button_event_cb(lv_event_t* e)
 {
 	lv_event_code_t code	  = lv_event_get_code(e);
@@ -1195,27 +1256,35 @@ static lv_obj_t* create_seq_screen(void)
 	lv_obj_center(play_label);
 	lv_obj_add_event_cb(play_btn, play_stop_event_cb, LV_EVENT_CLICKED, NULL);
 
-	// BPM label - smaller
-	lv_obj_t* bpm_title = lv_label_create(transport_cont);
-	lv_label_set_text(bpm_title, "BPM");
-	lv_obj_add_style(bpm_title, &style_button_label, 0);
-	// Use default font for BPM title
 
-	// BPM button - smaller
-	lv_obj_t* bpm_btn = lv_btn_create(transport_cont);
-	lv_obj_set_size(bpm_btn, 60, 25);
-	lv_obj_set_style_bg_color(bpm_btn, lv_color_black(), LV_PART_MAIN);
-	lv_obj_set_style_border_color(bpm_btn, lv_color_hex(0x666666), LV_PART_MAIN);
-	lv_obj_set_style_border_width(bpm_btn, 1, LV_PART_MAIN);
-	lv_obj_set_style_radius(bpm_btn, 2, LV_PART_MAIN);
-	bpm_btn_label = lv_label_create(bpm_btn);
-	char bpm_text[16];
-	snprintf(bpm_text, sizeof(bpm_text), "%d", (int)synth_state_get_bpm());
-	lv_label_set_text(bpm_btn_label, bpm_text);
-	lv_obj_add_style(bpm_btn_label, &style_button_label, 0);
-	// Use default font for BPM button label
-	lv_obj_center(bpm_btn_label);
-	lv_obj_add_event_cb(bpm_btn, bpm_btn_event_cb, LV_EVENT_CLICKED, NULL);
+
+	// Single RAND button
+	rand_button = lv_btn_create(transport_cont);
+	lv_obj_set_size(rand_button, 60, 35);
+	lv_obj_set_style_bg_color(rand_button, lv_color_hex(0x333333), LV_PART_MAIN);
+	lv_obj_set_style_border_color(rand_button, lv_color_hex(0x666666), LV_PART_MAIN);
+	lv_obj_set_style_border_width(rand_button, 1, LV_PART_MAIN);
+	lv_obj_set_style_radius(rand_button, 2, LV_PART_MAIN);
+
+	lv_obj_t* rand_label = lv_label_create(rand_button);
+	lv_label_set_text(rand_label, "RAND");
+	lv_obj_add_style(rand_label, &style_button_label_black, 0);
+	lv_obj_center(rand_label);
+	lv_obj_add_event_cb(rand_button, rand_button_event_cb, LV_EVENT_CLICKED, NULL);
+
+	// Vertical density slider (30-100%)
+	density_slider = lv_slider_create(transport_cont);
+	lv_obj_set_size(density_slider, 15, 80);
+	lv_slider_set_range(density_slider, 30, 100);
+	lv_slider_set_value(density_slider, 60, LV_ANIM_OFF);
+	lv_obj_add_style(density_slider, &style_slider, LV_PART_MAIN);
+	lv_obj_add_style(density_slider, &style_slider_indicator, LV_PART_INDICATOR);
+	lv_obj_add_style(density_slider, &style_slider_knob, LV_PART_KNOB);
+
+	// DNS label below slider
+	lv_obj_t* dns_label = lv_label_create(transport_cont);
+	lv_label_set_text(dns_label, "DNS");
+	lv_obj_add_style(dns_label, &style_button_label, 0);
 
 	// Menu positioned at bottom
 	lv_obj_t* menu = lv_obj_create(sequencer_screen);
@@ -1230,6 +1299,46 @@ static lv_obj_t* create_seq_screen(void)
 	return sequencer_screen;
 }
 
+static lv_obj_t* create_settings_screen(void)
+{
+	settings_screen = lv_obj_create(NULL);
+	lv_obj_add_style(settings_screen, &style_screen, 0);
+
+	// Main container for settings
+	lv_obj_t* main_cont = lv_obj_create(settings_screen);
+	lv_obj_add_style(main_cont, &style_tab_container, 0);
+	lv_obj_set_size(main_cont, lv_pct(80), lv_pct(80));
+	lv_obj_center(main_cont);
+	lv_obj_set_flex_flow(main_cont, LV_FLEX_FLOW_COLUMN);
+	lv_obj_set_flex_align(main_cont, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+	// Title
+	lv_obj_t* title = lv_label_create(main_cont);
+	lv_label_set_text(title, "SETTINGS");
+	lv_obj_add_style(title, &style_button_label, 0);
+
+	// BPM button
+	lv_obj_t* bpm_btn = lv_btn_create(main_cont);
+	lv_obj_set_size(bpm_btn, 120, 40);
+	lv_obj_set_style_bg_color(bpm_btn, lv_color_black(), LV_PART_MAIN);
+	lv_obj_set_style_border_color(bpm_btn, lv_color_hex(0x666666), LV_PART_MAIN);
+	lv_obj_set_style_border_width(bpm_btn, 1, LV_PART_MAIN);
+	lv_obj_set_style_radius(bpm_btn, 2, LV_PART_MAIN);
+	bpm_btn_label = lv_label_create(bpm_btn);
+	char bpm_text[16];
+	snprintf(bpm_text, sizeof(bpm_text), "%d BPM", (int)synth_state_get_bpm());
+	lv_label_set_text(bpm_btn_label, bpm_text);
+	lv_obj_add_style(bpm_btn_label, &style_button_label, 0);
+	lv_obj_center(bpm_btn_label);
+	lv_obj_add_event_cb(bpm_btn, bpm_btn_event_cb, LV_EVENT_CLICKED, NULL);
+
+	// Menu
+	lv_obj_t* menu = create_menu_flex(settings_screen);
+	create_menu_buttons(menu);
+
+	return settings_screen;
+}
+
 // --------------------------
 // UI init
 // --------------------------
@@ -1242,6 +1351,7 @@ void ui_init(lv_display_t* disp)
 
 	params_screen    = create_params_screen();
 	sequencer_screen = create_seq_screen();
+	settings_screen  = create_settings_screen();
 
 	// Initialize pattern button displays
 	update_all_pattern_buttons();
