@@ -10,7 +10,7 @@ typedef struct {
 	bool pressed;
 } mouse_state_t;
 
-static mouse_state_t mouse_state = { 0, 0, false };
+static mouse_state_t mouse_state = {0, 0, false};
 
 static lv_color16_t  buf1[LV_HOR_RES * 40];  // buffer for partial rendering
 static lv_display_t* disp;
@@ -24,9 +24,7 @@ static void flush_cb(lv_display_t* d, const lv_area_t* area, uint8_t* color_p)
 {
 	lv_color16_t* buf = (lv_color16_t*)color_p;
 
-	SDL_Rect sdl_area = {
-		.x = area->x1, .y = area->y1, .w = lv_area_get_width(area), .h = lv_area_get_height(area)
-	};
+	SDL_Rect sdl_area = {.x = area->x1, .y = area->y1, .w = lv_area_get_width(area), .h = lv_area_get_height(area)};
 
 	int pitch = lv_area_get_width(area) * sizeof(lv_color16_t);
 
@@ -47,8 +45,8 @@ void poll_sdl_events(void)
 			exit(0);
 		} else if (e.type == SDL_MOUSEBUTTONDOWN) {
 			mouse_state.pressed = true;
-			mouse_state.x	    = e.button.x;
-			mouse_state.y	    = e.button.y;
+			mouse_state.x       = e.button.x;
+			mouse_state.y       = e.button.y;
 		} else if (e.type == SDL_MOUSEBUTTONUP) {
 			mouse_state.pressed = false;
 		} else if (e.type == SDL_MOUSEMOTION) {
@@ -84,8 +82,8 @@ lv_display_t* ui_backend_init(void)
 
 	renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
 	SDL_RenderSetLogicalSize(renderer, LV_HOR_RES, LV_VER_RES);
-	texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB565, SDL_TEXTUREACCESS_STREAMING, LV_HOR_RES,
-				    LV_VER_RES);
+	texture =
+	    SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB565, SDL_TEXTUREACCESS_STREAMING, LV_HOR_RES, LV_VER_RES);
 
 	if (!window || !renderer || !texture) {
 		fprintf(stderr, "SDL initialization failed\n");
@@ -101,4 +99,9 @@ lv_display_t* ui_backend_init(void)
 	lv_indev_set_read_cb(mouse, touch_read_cb);
 
 	return disp;
+}
+
+void ui_backend_cleanup(void)
+{
+	// SDL cleanup is handled by the platform layer
 }

@@ -19,15 +19,16 @@ add_library(core
     src/main.c
     src/audio/audio.c
     src/ui/ui.c
-    dsp/dsp.c
     ${LIB_SOURCES}
 )
 
 target_include_directories(core PUBLIC
     src/audio
     src/ui
-    dsp
-    lib
+    lib/audio
+    lib/dsp
+    lib/sequencer
+    lib/platform
     submodules/CMSIS-DSP/Include
     submodules/CMSIS-DSP/Include/dsp
 )

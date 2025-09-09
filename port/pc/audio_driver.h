@@ -3,10 +3,10 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include "constants.h"
 
-#define AUDIO_SAMPLE_RATE 44100
-#define AUDIO_BUFFER_SIZE 256
-#define AUDIO_CHANNELS 2
+// Use centralized audio constants
+#define AUDIO_BUFFER_SIZE AUDIO_FRAMES_PER_BUFFER
 
 // Audio driver initialization and cleanup
 bool audio_driver_init(void);
@@ -23,4 +23,4 @@ bool audio_driver_is_running(void);
 // frames: number of stereo frames to generate
 void audio_driver_callback(float* out, uint32_t frames);
 
-#endif	// AUDIO_DRIVER_H
+#endif  // AUDIO_DRIVER_H

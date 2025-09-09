@@ -3,8 +3,9 @@
 
 #include "lvgl.h"
 
-/* Initialize the platform-specific backend (LCD + input) */
+/* PC-specific UI backend implementation */
 lv_display_t* ui_backend_init(void);
-void	      poll_sdl_events(void);
+void	  poll_sdl_events(void);
+void	  ui_backend_cleanup(void);
 
-#endif	// UI_BACKEND_H
+#endif  // UI_BACKEND_H

@@ -7,4 +7,4 @@
 // This function is called by platform-specific audio drivers
 void audio_driver_callback(float* out, uint32_t frames);
 
-#endif	// AUDIO_CALLBACK_H
+#endif  // AUDIO_CALLBACK_H

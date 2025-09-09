@@ -5,6 +5,6 @@
 
 /* Initialize the platform-specific backend (LCD + input) */
 lv_display_t* ui_backend_init(void);
-void	      poll_input_events(void);
+void	  poll_input_events(void);
 
-#endif	// UI_BACKEND_H
+#endif  // UI_BACKEND_H

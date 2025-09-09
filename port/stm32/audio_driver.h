@@ -23,4 +23,4 @@ bool audio_driver_is_running(void);
 // frames: number of stereo frames to generate
 void audio_driver_callback(float* out, uint32_t frames);
 
-#endif	// AUDIO_DRIVER_H
+#endif  // AUDIO_DRIVER_H

@@ -5,18 +5,18 @@
 #include <string.h>
 
 // PortAudio stream handle
-static PaStream* pa_stream	    = NULL;
-static bool	 driver_initialized = false;
-static bool	 driver_running	    = false;
+static PaStream* pa_stream	  = NULL;
+static bool      driver_initialized = false;
+static bool      driver_running     = false;
 
 // PortAudio callback function
 static int pa_callback(const void* inputBuffer, void* outputBuffer, unsigned long framesPerBuffer,
 		       const PaStreamCallbackTimeInfo* timeInfo, PaStreamCallbackFlags statusFlags, void* userData)
 {
 	(void)inputBuffer;  // Unused
-	(void)timeInfo;	    // Unused
+	(void)timeInfo;     // Unused
 	(void)statusFlags;  // Unused
-	(void)userData;	    // Unused
+	(void)userData;     // Unused
 
 	float* out = (float*)outputBuffer;
 
@@ -43,11 +43,11 @@ bool audio_driver_init(void)
 	err = Pa_OpenDefaultStream(&pa_stream,
 				   0,		       // no input channels
 				   AUDIO_CHANNELS,     // stereo output
-				   paFloat32,	       // 32-bit float samples
+				   paFloat32,	  // 32-bit float samples
 				   AUDIO_SAMPLE_RATE,  // sample rate
 				   AUDIO_BUFFER_SIZE,  // frames per buffer
-				   pa_callback,	       // callback function
-				   NULL);	       // no user data
+				   pa_callback,	// callback function
+				   NULL);	      // no user data
 
 	if (err != paNoError) {
 		fprintf(stderr, "PortAudio stream open failed: %s\n", Pa_GetErrorText(err));
