@@ -233,6 +233,7 @@ static const synth_param_t tab3_params[] = {PARAM_DISTORTION, PARAM_DELAY, PARAM
 // Popup objects
 static lv_obj_t* scale_popup	= NULL;
 static lv_obj_t* step_popup	 = NULL;
+static lv_obj_t* octave_display_label = NULL;
 static lv_obj_t* bpm_popup	  = NULL;
 static int       current_step_index = -1;
 static lv_obj_t* scale_btn_label    = NULL;
@@ -471,9 +472,16 @@ static void scale_btn_event_cb(lv_event_t* e)
 static void close_step_popup(lv_event_t* e)
 {
 	if (step_popup) {
+		int editing_step = current_step_index;  // Remember which step was being edited
 		lv_obj_del(step_popup);
 		step_popup	 = NULL;
+		octave_display_label = NULL;  // Clear octave display reference
 		current_step_index = -1;
+		
+		// Update the step button to remove editing highlight
+		if (editing_step >= 0) {
+			update_step_button_display(editing_step);
+		}
 	}
 }
 
@@ -534,6 +542,14 @@ static void octave_up_cb(lv_event_t* e)
 		if (step && step->octave < 2) {  // Limit to +2 octaves
 			step->octave++;
 			update_step_button_display(step_idx);
+			
+			// Update octave display in popup if it's open
+			if (octave_display_label) {
+				char octave_text[8];
+				snprintf(octave_text, sizeof(octave_text), "%+d", step->octave);
+				lv_label_set_text(octave_display_label, octave_text);
+			}
+			
 			printf("Step %d: Octave +%d\n", step_idx + 1, step->octave);
 		}
 	}
@@ -548,6 +564,14 @@ static void octave_down_cb(lv_event_t* e)
 		if (step && step->octave > -2) {  // Limit to -2 octaves
 			step->octave--;
 			update_step_button_display(step_idx);
+			
+			// Update octave display in popup if it's open
+			if (octave_display_label) {
+				char octave_text[8];
+				snprintf(octave_text, sizeof(octave_text), "%+d", step->octave);
+				lv_label_set_text(octave_display_label, octave_text);
+			}
+			
 			printf("Step %d: Octave %d\n", step_idx + 1, step->octave);
 		}
 	}
@@ -560,7 +584,10 @@ static void create_step_popup(int step_index)
 
 	current_step_index = step_index;
 	step_popup	 = lv_obj_create(lv_scr_act());
-	lv_obj_set_size(step_popup, 250, 300);
+	
+	// Update the step button to show it's being edited
+	update_step_button_display(step_index);
+	lv_obj_set_size(step_popup, 200, 200);
 	lv_obj_center(step_popup);
 	lv_obj_add_style(step_popup, &style_tab_container, 0);
 
@@ -574,22 +601,17 @@ static void create_step_popup(int step_index)
 	lv_obj_add_style(title, &style_button_label, 0);
 	lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 10);
 
-	// Note selection info (read-only, use long-press + drag to change)
-	lv_obj_t* note_info = lv_label_create(step_popup);
-	lv_label_set_text(note_info, "Note: Long-press + drag button to change");
-	lv_obj_add_style(note_info, &style_button_label, 0);
-	lv_obj_align(note_info, LV_ALIGN_TOP_MID, 0, 50);
 
 	// Octave controls
 	lv_obj_t* octave_label = lv_label_create(step_popup);
 	lv_label_set_text(octave_label, "Octave:");
 	lv_obj_add_style(octave_label, &style_button_label, 0);
-	lv_obj_align(octave_label, LV_ALIGN_TOP_LEFT, 20, 80);
+	lv_obj_align(octave_label, LV_ALIGN_TOP_LEFT, 20, 40);
 
 	// Octave down button
 	lv_obj_t* oct_down_btn = lv_btn_create(step_popup);
 	lv_obj_set_size(oct_down_btn, 30, 30);
-	lv_obj_align(oct_down_btn, LV_ALIGN_TOP_LEFT, 90, 75);
+	lv_obj_align(oct_down_btn, LV_ALIGN_TOP_LEFT, 90, 35);
 	lv_obj_set_style_bg_color(oct_down_btn, lv_color_hex(0x333333), LV_PART_MAIN);
 	lv_obj_set_style_border_color(oct_down_btn, lv_color_hex(0x666666), LV_PART_MAIN);
 	lv_obj_set_style_border_width(oct_down_btn, 1, LV_PART_MAIN);
@@ -602,18 +624,18 @@ static void create_step_popup(int step_index)
 	lv_obj_add_event_cb(oct_down_btn, octave_down_cb, LV_EVENT_CLICKED, (void*)(intptr_t)step_index);
 
 	// Octave display
-	lv_obj_t*	 oct_display  = lv_label_create(step_popup);
+	octave_display_label = lv_label_create(step_popup);
 	sequencer_step_t* current_step = synth_state_get_step(step_index);
 	char		  octave_text[8];
 	snprintf(octave_text, sizeof(octave_text), "%+d", current_step ? current_step->octave : 0);
-	lv_label_set_text(oct_display, octave_text);
-	lv_obj_add_style(oct_display, &style_button_label, 0);
-	lv_obj_align(oct_display, LV_ALIGN_TOP_LEFT, 135, 85);
+	lv_label_set_text(octave_display_label, octave_text);
+	lv_obj_add_style(octave_display_label, &style_button_label, 0);
+	lv_obj_align(octave_display_label, LV_ALIGN_TOP_LEFT, 135, 45);
 
 	// Octave up button
 	lv_obj_t* oct_up_btn = lv_btn_create(step_popup);
 	lv_obj_set_size(oct_up_btn, 30, 30);
-	lv_obj_align(oct_up_btn, LV_ALIGN_TOP_LEFT, 160, 75);
+	lv_obj_align(oct_up_btn, LV_ALIGN_TOP_LEFT, 160, 35);
 	lv_obj_set_style_bg_color(oct_up_btn, lv_color_hex(0x333333), LV_PART_MAIN);
 	lv_obj_set_style_border_color(oct_up_btn, lv_color_hex(0x666666), LV_PART_MAIN);
 	lv_obj_set_style_border_width(oct_up_btn, 1, LV_PART_MAIN);
@@ -628,7 +650,7 @@ static void create_step_popup(int step_index)
 	// Accent toggle button and label
 	lv_obj_t* accent_btn = lv_btn_create(step_popup);
 	lv_obj_set_size(accent_btn, 20, 20);
-	lv_obj_align(accent_btn, LV_ALIGN_TOP_LEFT, 20, 140);
+	lv_obj_align(accent_btn, LV_ALIGN_TOP_LEFT, 20, 80);
 	// Style button based on accent state
 	if (current_step && current_step->accent) {
 		lv_obj_set_style_bg_color(accent_btn, lv_color_hex(0x00AA22), LV_PART_MAIN);
@@ -642,7 +664,7 @@ static void create_step_popup(int step_index)
 	lv_obj_t* accent_label = lv_label_create(step_popup);
 	lv_label_set_text(accent_label, "Accent");
 	lv_obj_add_style(accent_label, &style_button_label, 0);
-	lv_obj_align(accent_label, LV_ALIGN_TOP_LEFT, 50, 145);
+	lv_obj_align(accent_label, LV_ALIGN_TOP_LEFT, 50, 85);
 
 	// Add event callback for accent button
 	lv_obj_add_event_cb(accent_btn, accent_toggle_cb, LV_EVENT_CLICKED, (void*)(intptr_t)step_index);
@@ -650,7 +672,7 @@ static void create_step_popup(int step_index)
 	// Slide toggle button and label
 	lv_obj_t* slide_btn = lv_btn_create(step_popup);
 	lv_obj_set_size(slide_btn, 20, 20);
-	lv_obj_align(slide_btn, LV_ALIGN_TOP_LEFT, 20, 180);
+	lv_obj_align(slide_btn, LV_ALIGN_TOP_LEFT, 20, 120);
 	// Style button based on slide state
 	if (current_step && current_step->slide) {
 		lv_obj_set_style_bg_color(slide_btn, lv_color_hex(0x00AA22), LV_PART_MAIN);
@@ -664,7 +686,7 @@ static void create_step_popup(int step_index)
 	lv_obj_t* slide_label = lv_label_create(step_popup);
 	lv_label_set_text(slide_label, "Slide");
 	lv_obj_add_style(slide_label, &style_button_label, 0);
-	lv_obj_align(slide_label, LV_ALIGN_TOP_LEFT, 50, 185);
+	lv_obj_align(slide_label, LV_ALIGN_TOP_LEFT, 50, 125);
 
 	// Add event callback for slide button
 	lv_obj_add_event_cb(slide_btn, slide_toggle_cb, LV_EVENT_CLICKED, (void*)(intptr_t)step_index);
@@ -693,15 +715,18 @@ static void update_step_button_display(int step_index)
 	if (!step || !step_buttons[step_index] || !step_button_labels[step_index])
 		return;
 
-	// Update button color based on state priority: playing > active > inactive
+	// Update button color based on state priority: playing > editing > active > inactive
 	// Only show the current step indicator for the currently active/playing pattern
 	lv_color_t bg_color;
 	if (synth_state_is_running() && step_index == synth_state_get_current_step_index() &&
 	    synth_state_get_current_pattern() == synth_state_get_active_pattern()) {
 		// Currently playing step on the active pattern - bright theme color
 		bg_color = lv_color_hex(0x00FF44);  // Bright green for current step
+	} else if (step_index == current_step_index && step_popup) {
+		// Currently being edited (popup is open) - highlight in blue
+		bg_color = lv_color_hex(0x0066AA);  // Blue for editing
 	} else if (step->active) {
-		// Active step but not currently playing
+		// Active step but not currently playing or editing
 		bg_color = lv_color_hex(0x00AA22);  // Normal green for active steps
 	} else {
 		// Inactive step
@@ -709,14 +734,22 @@ static void update_step_button_display(int step_index)
 	}
 	lv_obj_set_style_bg_color(step_buttons[step_index], bg_color, LV_PART_MAIN);
 
-	// Update note label
+	// Update note label with octave information
 	const int*  scale_intervals = get_scale_intervals(synth_state_get_scale());
 	const char* note_name       = "C";
 	if (scale_intervals && step->note_index >= 0 && step->note_index < 8) {
 		int note  = scale_intervals[step->note_index] % 12;
 		note_name = get_note_name(note);
 	}
-	lv_label_set_text(step_button_labels[step_index], note_name);
+	
+	// Include octave information if it's not 0
+	char label_text[8];
+	if (step->octave != 0) {
+		snprintf(label_text, sizeof(label_text), "%s%+d", note_name, step->octave);
+	} else {
+		snprintf(label_text, sizeof(label_text), "%s", note_name);
+	}
+	lv_label_set_text(step_button_labels[step_index], label_text);
 }
 
 // Update all step button displays (for current step indicator refresh)
