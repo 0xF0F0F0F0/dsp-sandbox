@@ -21,6 +21,7 @@ static lv_style_t style_slider_indicator;
 static lv_style_t style_slider_knob;
 static lv_style_t style_button;
 static lv_style_t style_button_label;
+static lv_style_t style_button_label_black;
 static lv_style_t style_step_container;
 static lv_style_t style_step_button;
 static lv_style_t style_step_label;
@@ -66,6 +67,10 @@ static void init_styles(void)
 	// Button label
 	lv_style_init(&style_button_label);
 	lv_style_set_text_color(&style_button_label, lv_color_hex(0xAAAAAA));
+
+	// Button label with black text (for pattern and control buttons)
+	lv_style_init(&style_button_label_black);
+	lv_style_set_text_color(&style_button_label_black, lv_color_black());
 
 	// Step container
 	lv_style_init(&style_step_container);
@@ -723,6 +728,7 @@ static void step_update_timer_cb(lv_timer_t* timer)
 {
 	if (synth_state_is_running()) {
 		update_all_step_buttons();
+		update_all_pattern_buttons();  // Update pattern highlighting when sequencer is running
 	}
 }
 
@@ -740,14 +746,20 @@ static void update_pattern_button_display(int pattern_index)
 	    !pattern_chain_indicators[pattern_index])
 		return;
 
-	// Update button background color (only selected vs not selected)
+	// Update button background color with priority: playing > selected > not selected
 	lv_color_t bg_color;
-	if (pattern_index == synth_state_get_current_pattern()) {
-		// Currently selected pattern
-		bg_color = lv_color_hex(0x00AA22);  // Green for selected
+	bool is_current_pattern = (pattern_index == synth_state_get_current_pattern());
+	bool is_active_pattern = (synth_state_is_running() && pattern_index == synth_state_get_active_pattern());
+	
+	if (is_active_pattern) {
+		// Currently playing pattern - bright highlight (similar to step highlight)
+		bg_color = lv_color_hex(0x00FF44);  // Bright green for playing
+	} else if (is_current_pattern) {
+		// Currently selected for editing but not playing
+		bg_color = lv_color_hex(0x00AA22);  // Normal green for selected
 	} else {
-		// Not selected pattern
-		bg_color = lv_color_hex(0x333333);  // Dark gray for not selected
+		// Not selected or playing
+		bg_color = lv_color_hex(0x333333);  // Dark gray for inactive
 	}
 	lv_obj_set_style_bg_color(pattern_buttons[pattern_index], bg_color, LV_PART_MAIN);
 
@@ -1084,7 +1096,7 @@ static lv_obj_t* create_seq_screen(void)
 		lv_obj_t* label		 = lv_label_create(btn);
 		pattern_button_labels[i] = label;
 		lv_label_set_text(label, pattern_names[i]);
-		lv_obj_set_style_text_color(label, lv_color_white(), LV_PART_MAIN);
+		lv_obj_set_style_text_color(label, lv_color_black(), LV_PART_MAIN);
 		// Use default font size for pattern labels
 		lv_obj_center(label);
 
@@ -1178,7 +1190,7 @@ static lv_obj_t* create_seq_screen(void)
 	lv_obj_set_style_border_width(play_btn, 1, LV_PART_MAIN);
 	lv_obj_t* play_label = lv_label_create(play_btn);
 	lv_label_set_text(play_label, "PLAY");
-	lv_obj_add_style(play_label, &style_button_label, 0);
+	lv_obj_add_style(play_label, &style_button_label_black, 0);
 	// Use default font for play button
 	lv_obj_center(play_label);
 	lv_obj_add_event_cb(play_btn, play_stop_event_cb, LV_EVENT_CLICKED, NULL);
